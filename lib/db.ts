@@ -83,6 +83,7 @@ CREATE TABLE IF NOT EXISTS runs (
   total_count INTEGER NOT NULL DEFAULT 0,
   error TEXT
 );
+ALTER TABLE runs ADD COLUMN IF NOT EXISTS raw_count INTEGER NOT NULL DEFAULT 0;
 CREATE INDEX IF NOT EXISTS idx_runs_search ON runs(search_id, started_at DESC);
 `;
 
@@ -207,9 +208,9 @@ export function markRunEnd(id: string, error: string | null, freqMinutes: number
   );
 }
 
-export type RunRow = { id: number; started_at: number; finished_at: number | null; new_count: number; total_count: number; error: string | null };
+export type RunRow = { id: number; started_at: number; finished_at: number | null; new_count: number; total_count: number; raw_count: number; error: string | null };
 export const listRuns = (searchId: string, limit = 8) =>
-  all<RunRow>("SELECT id, started_at, finished_at, new_count, total_count, error FROM runs WHERE search_id=? ORDER BY started_at DESC LIMIT " + Number(limit), searchId);
+  all<RunRow>("SELECT id, started_at, finished_at, new_count, total_count, raw_count, error FROM runs WHERE search_id=? ORDER BY started_at DESC LIMIT " + Number(limit), searchId);
 
 /* ---------- sinal de vida ---------- */
 
@@ -217,9 +218,9 @@ export const setKv = (key: string, value: string) =>
   run("INSERT INTO kv (key,value,updated_at) VALUES (?,?,?) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value, updated_at=EXCLUDED.updated_at", key, value, Date.now());
 export const getKv = (key: string) => get<{ value: string; updated_at: number }>("SELECT value, updated_at FROM kv WHERE key=?", key);
 
-export const logRun = (searchId: string, startedAt: number, newCount: number, total: number, error: string | null) =>
-  run("INSERT INTO runs (search_id,started_at,finished_at,new_count,total_count,error) VALUES (?,?,?,?,?,?)",
-    searchId, startedAt, Date.now(), newCount, total, error);
+export const logRun = (searchId: string, startedAt: number, newCount: number, total: number, error: string | null, raw = 0) =>
+  run("INSERT INTO runs (search_id,started_at,finished_at,new_count,total_count,raw_count,error) VALUES (?,?,?,?,?,?,?)",
+    searchId, startedAt, Date.now(), newCount, total, raw, error);
 
 /* ---------- jobs ---------- */
 

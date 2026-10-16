@@ -68,13 +68,13 @@ async function withPage<T>(fn: (p: import("playwright-core").Page, ctx: import("
 
 class Blocked extends Error {}
 
-async function google(q: string, { recency = "any", page = 1, num = 20 }: Opts): Promise<SerpResult[]> {
+async function google(q: string, { recency = "any", page = 1 }: Opts): Promise<SerpResult[]> {
   if ((g.__vagasGoogleBlockedUntil ?? 0) > Date.now()) throw new Blocked("Google em pausa após CAPTCHA");
 
   return enqueue(() => withPage(async (p, ctx) => {
     {
       const tbs = { day: "qdr:d", week: "qdr:w", month: "qdr:m", any: "" }[recency];
-      const url = `https://www.google.com/search?q=${encodeURIComponent(q)}&hl=pt-BR&gl=br&num=${num}&start=${(page - 1) * num}&pws=0${tbs ? `&tbs=${tbs}` : ""}`;
+      const url = `https://www.google.com/search?q=${encodeURIComponent(q)}&hl=pt-BR&gl=br&start=${(page - 1) * 10}&pws=0${tbs ? `&tbs=${tbs}` : ""}`;
       await p.goto(url, { waitUntil: "domcontentloaded", timeout: 25000 });
 
       // tela de consentimento (comum em IP europeu)

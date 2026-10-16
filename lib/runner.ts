@@ -23,6 +23,7 @@ export async function runSearch(searchId: string): Promise<{ added: number; tota
   }
   let added = 0;
   let total = 0;
+  let raw = 0;
   let error: string | null = null;
 
   try {
@@ -32,10 +33,15 @@ export async function runSearch(searchId: string): Promise<{ added: number; tota
     if (isDemoMode()) {
       results = demoJobs(s.query, s.location);
     } else {
-      // 2ª página só se a 1ª veio cheia — menos requisições = menos chance de CAPTCHA
-      results = await googleSearch(q, { recency: s.recency, page: 1 });
-      if (results.length >= 8) results = results.concat(await googleSearch(q, { recency: s.recency, page: 2 }).catch(() => []));
+      // Até 3 páginas (~30 resultados), parando quando a página vem vazia/curta — menos requisições = menos CAPTCHA
+      results = [];
+      for (let page = 1; page <= 3; page++) {
+        const r = await googleSearch(q, { recency: s.recency, page }).catch((e) => { if (page === 1) throw e; return []; });
+        results = results.concat(r);
+        if (r.length < 6) break;
+      }
     }
+    raw = results.length;
 
     const seen = new Set<string>();
     for (const r of results) {
@@ -62,7 +68,7 @@ export async function runSearch(searchId: string): Promise<{ added: number; tota
     error = e instanceof Error ? e.message : String(e);
   } finally {
     await markRunEnd(s.id, error, s.freq_minutes);
-    await logRun(s.id, startedAt, added, total, error);
+    await logRun(s.id, startedAt, added, total, error, raw);
     running.delete(s.id);
   }
   return { added, total, ...(error ? { error } : {}) };

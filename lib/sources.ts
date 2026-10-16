@@ -1,19 +1,11 @@
 // Catálogo de fontes (client-safe). "web" = Google aberto, sem filtro de site.
 export type Source = { key: string; label: string; sites: string[]; hint?: string };
 
+// Só fontes comprovadas com o robô próprio. "Google aberto" já alcança qualquer outro site que tenha página de vaga.
 export const SOURCES: Source[] = [
   { key: "web", label: "Google aberto", sites: [], hint: "qualquer site" },
   { key: "linkedin", label: "LinkedIn", sites: ["linkedin.com/jobs/view"] },
   { key: "gupy", label: "Gupy", sites: ["gupy.io"] },
-  { key: "greenhouse", label: "Greenhouse", sites: ["boards.greenhouse.io", "job-boards.greenhouse.io"] },
-  { key: "lever", label: "Lever", sites: ["jobs.lever.co"] },
-  { key: "ashby", label: "Ashby", sites: ["jobs.ashbyhq.com"] },
-  { key: "workable", label: "Workable", sites: ["apply.workable.com"] },
-  { key: "indeed", label: "Indeed", sites: ["indeed.com", "br.indeed.com"] },
-  { key: "glassdoor", label: "Glassdoor", sites: ["glassdoor.com.br", "glassdoor.com"] },
-  { key: "vagas", label: "Vagas.com", sites: ["vagas.com.br"] },
-  { key: "catho", label: "Catho", sites: ["catho.com.br"] },
-  { key: "infojobs", label: "InfoJobs", sites: ["infojobs.com.br"] },
 ];
 
 export const FREQUENCIES = [

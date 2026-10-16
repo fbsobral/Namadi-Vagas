@@ -6,7 +6,7 @@ Radar de vagas: buscas personalizadas salvas por usuário, um robô que consulta
 
 ## Como funciona
 
-- **Buscas**: nome, palavras-chave, local, fontes (Google aberto, LinkedIn, Gupy, Greenhouse, Lever…), janela de tempo e **frequência** (30 min → semanal, ou minutos customizados).
+- **Buscas**: nome, palavras-chave, local, fontes (Google aberto, LinkedIn e Gupy; o Google aberto já alcança qualquer outro site com página de vaga), janela de tempo e **frequência** (30 min → semanal, ou minutos customizados).
 - **Robô**: `instrumentation.ts` sobe um agendador interno (tick de 1 min) que roda as buscas vencidas. Deduplica por URL e só grava vagas novas. Também há `GET /api/cron` (com `Authorization: Bearer $CRON_SECRET`) para disparo externo.
 - **Confiabilidade**: a trava de cada busca fica no banco (atômica, expira em 15 min se o processo morrer), então duas réplicas não duplicam rodadas. Se uma busca falha, tenta de novo em até 30 min. O agendador grava um sinal de vida a cada minuto; o painel mostra "Robô online/parado" e o histórico das últimas rodadas de cada busca.
 - **Favoritou → contatos**: `lib/contacts.ts` faz 3 consultas `site:linkedin.com/in "<empresa>" …` (recrutadores, lideranças, time), filtra homônimos pela empresa, classifica e salva. A UI mostra cada pessoa com link e mensagem sugerida.

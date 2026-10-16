@@ -27,7 +27,7 @@ export function RunHistory({ runs }: { runs: RunRow[] }) {
             <span className={`mt-1.5 size-2 shrink-0 rounded-full ${r.error ? "bg-accent" : "bg-ok"}`} />
             <div className="min-w-0 flex-1">
               <p className="text-ink-2">
-                {timeAgo(r.started_at)} · {r.error ? "falhou" : `${r.new_count} nova${r.new_count === 1 ? "" : "s"} de ${r.total_count} encontradas`}
+                {timeAgo(r.started_at)} · {r.error ? "falhou" : `${r.new_count} nova${r.new_count === 1 ? "" : "s"} · ${r.total_count} vaga${r.total_count === 1 ? "" : "s"} válida${r.total_count === 1 ? "" : "s"} de ${r.raw_count} resultados do Google`}
                 {r.finished_at && <span className="text-ink-3"> · {Math.max(1, Math.round((r.finished_at - r.started_at) / 1000))}s</span>}
               </p>
               {r.error && <p className="truncate text-xs text-accent" title={r.error}>{r.error}</p>}
