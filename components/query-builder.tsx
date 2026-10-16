@@ -16,7 +16,7 @@ export function QueryBuilder({ spec, onChange }: { spec: QuerySpec; onChange: (s
     <div>
       <div className="mb-2 flex items-baseline justify-between gap-3">
         <span className="text-sm font-medium">Palavras-chave</span>
-        <span className="text-xs text-ink-3">Enter adiciona · termo com espaço vira frase exata</span>
+        <span className="hidden text-xs text-ink-3 sm:inline">Enter adiciona · termo com espaço vira frase exata</span>
       </div>
 
       <div className="space-y-2">

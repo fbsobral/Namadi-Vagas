@@ -70,7 +70,7 @@ function Preview() {
   return (
     <div className="anim-rise relative mx-auto max-w-5xl px-5" style={{ animationDelay: ".28s" }}>
       <div className="absolute inset-x-10 -top-6 h-40 rounded-full bg-accent/20 blur-3xl" />
-      <div className="relative grid overflow-hidden rounded-[28px] border border-line bg-surface shadow-pop md:grid-cols-[230px_1fr]">
+      <div className="relative grid overflow-hidden rounded-[28px] grid-cols-1 border border-line bg-surface shadow-pop md:grid-cols-[230px_1fr]">
         <aside className="hidden border-r border-line bg-surface-2/60 p-4 md:block">
           <p className="mb-3 px-2 text-[11px] font-medium tracking-wider text-ink-3 uppercase">Minhas buscas</p>
           {[["Product Design", "#E8501F", 12], ["UX Research · remoto", "#2F6BFF", 4], ["Design Lead", "#14A37F", 0]].map(([n, c, k], i) => (
@@ -80,7 +80,7 @@ function Preview() {
             </div>
           ))}
         </aside>
-        <div className="p-5 text-left md:p-7">
+        <div className="min-w-0 p-5 text-left md:p-7">
           <div className="mb-5 flex items-end justify-between">
             <div>
               <p className="font-display text-3xl">Product Design</p>

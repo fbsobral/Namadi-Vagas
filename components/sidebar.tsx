@@ -14,10 +14,11 @@ type Props = {
   currentId: string | null;
   filter: string;
   view?: "list" | "board";
+  robotOnline?: boolean;
   children: React.ReactNode; // UserButton
 };
 
-export function Sidebar({ searches, counts, currentId, filter, view = "list", children }: Props) {
+export function Sidebar({ searches, counts, currentId, filter, view = "list", robotOnline, children }: Props) {
   const [mobile, setMobile] = useState(false);
   const [dialog, setDialog] = useState(false);
   const allActive = !currentId && filter !== "fav";
@@ -68,9 +69,13 @@ export function Sidebar({ searches, counts, currentId, filter, view = "list", ch
 
   return (
     <>
-      <div className="sticky top-0 z-30 flex items-center justify-between border-b border-line bg-bg/85 px-4 py-3 backdrop-blur lg:hidden">
+      <div className="pt-safe sticky top-0 z-30 flex items-center justify-between gap-3 border-b border-line bg-bg/85 px-4 py-3 backdrop-blur lg:hidden">
         <Logo size={24} />
-        <button onClick={() => setMobile(true)} aria-label="Abrir menu" className="grid size-9 place-items-center rounded-full border border-line bg-surface"><Menu className="size-5" /></button>
+        <span className="ml-auto inline-flex items-center gap-1.5 text-xs font-medium text-ink-2" title={robotOnline ? "Robô online" : "Robô parado"}>
+          <span className={`size-2 rounded-full ${robotOnline ? "pulse-dot bg-ok" : "bg-accent"}`} style={{ ["--dot" as string]: robotOnline ? "var(--ok)" : "var(--accent)" }} />
+          {robotOnline ? "online" : "parado"}
+        </span>
+        <button onClick={() => setMobile(true)} aria-label="Abrir menu" className="grid size-11 place-items-center rounded-full border border-line bg-surface"><Menu className="size-5" /></button>
       </div>
 
       <aside className="sticky top-0 hidden h-dvh w-[290px] shrink-0 border-r border-line bg-surface-2/50 lg:block">{nav}</aside>

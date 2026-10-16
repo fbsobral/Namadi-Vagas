@@ -19,10 +19,10 @@ export function SearchToolbar({ search, unseen }: { search: Search; unseen: numb
     });
   const running = pending || search.last_status === "running";
 
-  const btn = "inline-flex items-center gap-2 rounded-full border border-line bg-surface px-4 py-2 text-sm font-medium transition hover:bg-surface-2 disabled:opacity-50";
+  const btn = "inline-flex shrink-0 items-center gap-2 rounded-full border border-line bg-surface px-4 py-2.5 text-sm font-medium whitespace-nowrap transition hover:bg-surface-2 disabled:opacity-50 sm:py-2";
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
+    <div className="scroll-thin -mx-4 flex items-center gap-2 overflow-x-auto px-4 pb-1 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0">
       <button className={`${btn} !border-ink !bg-ink !text-bg hover:!opacity-85`} disabled={running} onClick={() =>
         attempt(async () => {
           setMsg(null);

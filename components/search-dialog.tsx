@@ -60,10 +60,10 @@ function DialogBody({ onClose, initial }: { onClose: () => void; initial?: Searc
   return createPortal(
     <div className="fixed inset-0 z-50 grid place-items-end sm:place-items-center">
       <div className="anim-fade absolute inset-0 bg-ink/50 backdrop-blur-sm" onClick={onClose} />
-      <form onSubmit={submit} className="anim-pop scroll-thin relative max-h-[94dvh] text-left w-full max-w-2xl overflow-y-auto rounded-t-[28px] border border-line bg-surface p-6 shadow-pop sm:rounded-[28px] sm:p-8">
+      <form onSubmit={submit} className="anim-pop scroll-thin relative max-h-[94dvh] w-full max-w-2xl overflow-y-auto rounded-t-[28px] border border-line bg-surface px-5 pt-6 text-left shadow-pop sm:rounded-[28px] sm:px-8 sm:pt-8">
         <button type="button" onClick={onClose} aria-label="Fechar" className="absolute top-5 right-5 grid size-9 place-items-center rounded-full text-ink-3 transition hover:bg-surface-2 hover:text-ink"><X className="size-5" /></button>
         <p className="text-xs font-medium tracking-wider text-accent uppercase">{initial ? "Editar busca" : "Nova busca"}</p>
-        <h2 className="font-display mt-1 text-4xl">{initial ? "Ajuste o radar" : "O que você procura?"}</h2>
+        <h2 className="font-display mt-1 pr-10 text-3xl sm:text-4xl">{initial ? "Ajuste o radar" : "O que você procura?"}</h2>
 
         <label className="mt-6 block">
           <span className="mb-2 block text-sm font-medium">Nome da busca <span className="text-ink-3">(opcional)</span></span>
@@ -121,7 +121,7 @@ function DialogBody({ onClose, initial }: { onClose: () => void; initial?: Searc
 
         {error && <p role="alert" className="mt-4 rounded-xl bg-accent-soft px-4 py-3 text-sm text-accent">{error}</p>}
 
-        <div className="mt-7 flex items-center justify-end gap-3">
+        <div className="pb-safe sticky bottom-0 -mx-5 mt-7 flex items-center justify-end gap-3 border-t border-line bg-surface/95 px-5 pt-4 backdrop-blur sm:-mx-8 sm:px-8">
           <button type="button" onClick={onClose} className="rounded-full px-5 py-3 text-sm font-medium text-ink-2 transition hover:bg-surface-2">Cancelar</button>
           <button disabled={pending || !hasTerms(f.spec)} className="rounded-full bg-accent px-7 py-3 font-medium text-accent-ink transition hover:opacity-90 disabled:opacity-50">
             {pending ? "Salvando…" : initial ? "Salvar alterações" : "Criar e rodar agora"}

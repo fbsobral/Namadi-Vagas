@@ -47,12 +47,12 @@ export function JobDrawer({ job, contacts, closeHref }: { job: Job; contacts: Co
         <AutoRefresh active={pending} every={2000} />
         <div className="sticky top-0 z-10 flex items-center justify-between border-b border-line bg-bg/90 px-6 py-3 backdrop-blur">
           <span className="text-xs font-medium tracking-wider text-ink-3 uppercase">Detalhes da vaga</span>
-          <Link href={closeHref} scroll={false} className="grid size-9 place-items-center rounded-full hover:bg-surface-2" aria-label="Fechar"><X className="size-5" /></Link>
+          <Link href={closeHref} scroll={false} className="grid size-11 place-items-center rounded-full hover:bg-surface-2 sm:size-9" aria-label="Fechar"><X className="size-5" /></Link>
         </div>
 
-        <div className="px-6 pt-6 pb-4">
+        <div className="px-5 pt-6 pb-4 sm:px-6">
           <Avatar name={job.company} size={64} />
-          <h2 className="font-display mt-5 text-4xl leading-[1.05]">{job.title}</h2>
+          <h2 className="font-display mt-5 text-3xl leading-[1.05] sm:text-4xl">{job.title}</h2>
           <p className="mt-2 flex flex-wrap items-center gap-x-3 text-ink-2">
             <span className="font-medium text-ink">{job.company}</span>
             {job.location && <span className="inline-flex items-center gap-1"><MapPin className="size-4" />{job.location}</span>}
@@ -69,7 +69,7 @@ export function JobDrawer({ job, contacts, closeHref }: { job: Job; contacts: Co
           </div>
         </div>
 
-        <section className="mt-2 flex-1 border-t border-line bg-surface-2/40 px-6 py-6">
+        <section className="pb-safe mt-2 flex-1 border-t border-line bg-surface-2/40 px-5 py-6 sm:px-6">
           <div className="flex items-start justify-between gap-3">
             <div>
               <h3 className="font-display text-3xl">Pessoas para conhecer</h3>

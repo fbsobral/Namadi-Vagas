@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono, Instrument_Serif } from "next/font/google";
 import { ClerkProvider } from "@clerk/nextjs";
 import { ptBR } from "@clerk/localizations";
@@ -11,6 +11,16 @@ const serif = Instrument_Serif({ variable: "--font-serif", subsets: ["latin"], w
 export const metadata: Metadata = {
   title: "Namadi Vagas — o radar das suas próximas oportunidades",
   description: "Buscas personalizadas de vagas, um robô que vigia o Google por você e os contatos certos no LinkedIn quando você favorita.",
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#f6f3ec" },
+    { media: "(prefers-color-scheme: dark)", color: "#0f0e0c" },
+  ],
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

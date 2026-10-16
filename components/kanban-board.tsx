@@ -52,7 +52,7 @@ export function KanbanBoard({ jobs, hrefs, showSearch }: { jobs: Job[]; hrefs: R
           <strong>Seu quadro está vazio.</strong> Favorite uma vaga (★) na lista e ela entra aqui em <em>A candidatar</em>. Depois é só arrastar entre as etapas.
         </div>
       )}
-      <div className="scroll-thin -mx-4 flex snap-x gap-4 overflow-x-auto px-4 pb-6 sm:-mx-8 sm:px-8 lg:mx-0 lg:px-0">
+      <div className="scroll-thin -mx-4 flex snap-x snap-mandatory scroll-px-4 gap-3 overflow-x-auto px-4 pb-6 sm:-mx-8 sm:scroll-px-8 sm:gap-4 sm:px-8 lg:mx-0 lg:snap-none lg:px-0">
         {STAGES.map((st) => {
           const items = board[st.key];
           const active = over?.stage === st.key;
@@ -78,7 +78,7 @@ export function KanbanBoard({ jobs, hrefs, showSearch }: { jobs: Job[]; hrefs: R
                 if (drag && over) move(drag.id, over.stage, over.index);
                 setDrag(null); setOver(null);
               }}
-              className={`flex max-h-[calc(100dvh-14rem)] min-h-[320px] w-[290px] shrink-0 snap-start flex-col rounded-3xl border bg-surface-2/60 p-3 transition ${active ? "border-accent bg-accent-soft/40" : "border-line"}`}
+              className={`flex min-h-[240px] w-[84vw] max-w-[340px] shrink-0 snap-start flex-col lg:max-h-[calc(100dvh-14rem)] lg:min-h-[320px] lg:w-[290px] rounded-3xl border bg-surface-2/60 p-3 transition ${active ? "border-accent bg-accent-soft/40" : "border-line"}`}
             >
               <header className="mb-3 flex items-start justify-between gap-2 px-2 pt-1">
                 <div>
@@ -142,10 +142,10 @@ function Card({ job, href, showSearch, dragging, onDragStart, onDragEnd, onMove,
         {/* alternativa ao arrastar (celular/teclado) */}
         <label className="sr-only" htmlFor={`mv-${job.id}`}>Mover para</label>
         <select id={`mv-${job.id}`} value={stage} onChange={(e) => onMove(e.target.value as StageKey)}
-          className="max-w-[150px] cursor-pointer rounded-lg border border-line bg-bg px-2 py-1 text-xs text-ink-2 outline-none focus:border-accent">
+          className="min-h-10 max-w-[190px] cursor-pointer rounded-lg border border-line bg-bg px-2.5 py-1.5 text-sm text-ink-2 outline-none focus:border-accent lg:min-h-0 lg:max-w-[150px] lg:text-xs">
           {STAGES.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
         </select>
-        <a href={job.url} target="_blank" rel="noopener noreferrer" draggable={false} aria-label="Abrir vaga em nova aba" className="grid size-7 place-items-center rounded-full text-ink-3 transition hover:bg-surface-2 hover:text-ink"><ArrowUpRight className="size-4" /></a>
+        <a href={job.url} target="_blank" rel="noopener noreferrer" draggable={false} aria-label="Abrir vaga em nova aba" className="grid size-10 place-items-center rounded-full text-ink-3 transition hover:bg-surface-2 hover:text-ink lg:size-7"><ArrowUpRight className="size-4" /></a>
       </div>
     </article>
   );

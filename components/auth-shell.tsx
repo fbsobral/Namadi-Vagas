@@ -13,8 +13,9 @@ export function AuthShell({ title, sub, children }: { title: string; sub: string
         <Radar />
         <p className="relative z-10 text-sm text-bg/40">Buscas salvas · robô agendado · contatos no LinkedIn</p>
       </section>
-      <section className="flex items-center justify-center p-6">
-        <div className="anim-rise">{children}</div>
+      <section className="flex flex-col items-center justify-center gap-8 p-4 sm:p-6">
+        <Link href="/" className="lg:hidden"><Logo /></Link>
+        <div className="anim-rise max-w-full">{children}</div>
       </section>
     </main>
   );

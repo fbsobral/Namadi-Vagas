@@ -12,12 +12,12 @@ export function JobCard({ job, href, showSearch, index }: { job: Job; href: stri
       className="group anim-rise relative rounded-3xl border border-line bg-surface shadow-card transition duration-200 hover:-translate-y-0.5 hover:border-ink-3/40 hover:shadow-pop"
       style={{ animationDelay: `${Math.min(index, 10) * 40}ms` }}
     >
-      <Link href={href} scroll={false} className="block rounded-3xl p-5 pr-16 focus-visible:outline-2 focus-visible:outline-accent" aria-label={`${job.title} na ${job.company}`}>
-        <div className="flex gap-4">
-          <Avatar name={job.company} />
+      <Link href={href} scroll={false} className="block rounded-3xl p-4 pr-14 focus-visible:outline-2 focus-visible:outline-accent sm:p-5 sm:pr-16" aria-label={`${job.title} na ${job.company}`}>
+        <div className="flex gap-3 sm:gap-4">
+          <Avatar name={job.company} size={44} />
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-              <h3 className="text-[17px] leading-snug font-semibold">{job.title}</h3>
+              <h3 className="text-base leading-snug font-semibold sm:text-[17px]">{job.title}</h3>
               {!job.seen && <span className="rounded-full bg-accent px-2 py-0.5 text-[10px] font-bold tracking-wide text-accent-ink">NOVA</span>}
             </div>
             <p className="mt-0.5 flex flex-wrap items-center gap-x-2 text-sm text-ink-2">
@@ -39,9 +39,9 @@ export function JobCard({ job, href, showSearch, index }: { job: Job; href: stri
           </div>
         </div>
       </Link>
-      <div className="absolute top-4 right-4 flex flex-col items-center gap-1">
+      <div className="absolute top-2 right-2 flex flex-col items-center gap-0.5 sm:top-4 sm:right-4 sm:gap-1">
         <FavoriteButton jobId={job.id} favorite={job.favorite === 1} />
-        <a href={job.url} target="_blank" rel="noopener noreferrer" aria-label="Abrir vaga em nova aba" className="grid size-10 place-items-center rounded-full text-ink-3 opacity-0 transition group-hover:opacity-100 hover:bg-surface-2 hover:text-ink focus-visible:opacity-100">
+        <a href={job.url} target="_blank" rel="noopener noreferrer" aria-label="Abrir vaga em nova aba" className="grid size-10 place-items-center rounded-full text-ink-3 transition hover:bg-surface-2 hover:text-ink focus-visible:opacity-100 lg:opacity-0 lg:group-hover:opacity-100">
           <ArrowUpRight className="size-5" />
         </a>
       </div>

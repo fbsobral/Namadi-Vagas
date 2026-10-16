@@ -62,7 +62,7 @@ export default async function Dashboard({ searchParams }: PageProps<"/dashboard"
   return (
     <div className="relative z-10 flex min-h-dvh flex-col lg:flex-row">
       <AutoRefresh active={anyRunning} />
-      <Sidebar searches={searches} counts={counts} currentId={current?.id ?? null} filter={filter} view={view}>
+      <Sidebar searches={searches} counts={counts} currentId={current?.id ?? null} filter={filter} view={view} robotOnline={isFresh(beat?.updated_at, 3 * 60_000)}>
         <UserButton />
         <div className="min-w-0 text-sm">
           <p className="truncate font-medium">{user?.firstName ?? user?.username ?? "Você"}</p>
@@ -70,8 +70,8 @@ export default async function Dashboard({ searchParams }: PageProps<"/dashboard"
         </div>
       </Sidebar>
 
-      <main className="min-w-0 flex-1 px-4 pt-8 pb-24 sm:px-8 lg:px-12">
-        <div className={`mx-auto ${view === "board" ? "max-w-[1500px]" : "max-w-4xl"}`}>
+      <main className="pb-safe min-w-0 flex-1 px-4 pt-6 pb-24 sm:px-8 sm:pt-8 lg:px-12">
+        <div className="mx-auto w-full max-w-[1600px]">
           {isDemoMode() && (
             <div role="note" className="anim-rise mb-6 flex items-start gap-3 rounded-2xl border border-accent/30 bg-accent-soft px-4 py-3 text-sm">
               <AlertTriangle className="mt-0.5 size-4 shrink-0 text-accent" />
@@ -79,14 +79,14 @@ export default async function Dashboard({ searchParams }: PageProps<"/dashboard"
             </div>
           )}
 
-          <div className="mb-5 flex justify-end"><RobotStatus lastBeat={beat?.updated_at ?? null} online={isFresh(beat?.updated_at, 3 * 60_000)} /></div>
+          <div className="mb-5 hidden justify-end lg:flex"><RobotStatus lastBeat={beat?.updated_at ?? null} online={isFresh(beat?.updated_at, 3 * 60_000)} /></div>
 
           <header className="anim-rise">
             <div className="flex items-center gap-2 text-sm text-ink-3">
               {current && <span className="size-2.5 rounded-full" style={{ background: current.color }} />}
               {current ? (current.active ? <span className="inline-flex items-center gap-1.5">robô {current.last_status === "running" ? "buscando agora…" : `ativo · ${freqLabel(current.freq_minutes)}`}</span> : "pausada") : "visão geral"}
             </div>
-            <h1 className="font-display mt-1 text-5xl leading-none sm:text-6xl">{title}</h1>
+            <h1 className="font-display mt-1 text-4xl leading-none break-words sm:text-6xl">{title}</h1>
             {current ? (
               <>
                 <p className="mt-3 max-w-2xl font-mono text-[13px] leading-relaxed text-ink-3">{buildGoogleQuery(current.query, current.location, sources)}</p>
@@ -102,21 +102,21 @@ export default async function Dashboard({ searchParams }: PageProps<"/dashboard"
             )}
           </header>
 
-          <div className="mt-8 flex flex-wrap items-end justify-between gap-3 border-b border-line">
+          <div className="mt-6 flex items-end justify-between gap-2 border-b border-line sm:mt-8">
             {view === "list" ? (
-              <div className="flex gap-1" role="tablist">
+              <div className="-mb-px flex min-w-0 gap-0.5 overflow-x-auto [scrollbar-width:none] sm:gap-1 [&::-webkit-scrollbar]:hidden" role="tablist">
                 {([["all", "Todas"], ["new", "Novas"], ["fav", "Favoritas"]] as const).map(([k, l]) => (
                   <Link key={k} href={base({ f: k === "all" ? null : k })} role="tab" aria-selected={filter === k}
-                    className={`-mb-px border-b-2 px-4 py-3 text-sm font-medium transition ${filter === k ? "border-accent text-ink" : "border-transparent text-ink-3 hover:text-ink"}`}>{l}</Link>
+                    className={`-mb-px shrink-0 border-b-2 px-3 py-3 text-sm font-medium transition sm:px-4 ${filter === k ? "border-accent text-ink" : "border-transparent text-ink-3 hover:text-ink"}`}>{l}</Link>
                 ))}
               </div>
             ) : (
-              <p className="pb-3 text-sm text-ink-3">Arraste as vagas entre as etapas da candidatura.</p>
+              <p className="pb-3 text-xs text-ink-3 sm:text-sm"><span className="hidden sm:inline">Arraste as vagas entre as etapas da candidatura.</span><span className="sm:hidden">Use o seletor de cada vaga para mover.</span></p>
             )}
             <div role="group" aria-label="Visualização" className="mb-2 inline-flex rounded-full border border-line bg-surface p-0.5 text-sm font-medium">
               {([["list", "Lista", LayoutList], ["board", "Kanban", Columns3]] as const).map(([v, l, Icon]) => (
                 <Link key={v} href={viewHref(v)} aria-current={view === v} scroll={false}
-                  className={`inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 transition ${view === v ? "bg-ink text-bg" : "text-ink-3 hover:text-ink"}`}><Icon className="size-4" />{l}</Link>
+                  className={`inline-flex items-center gap-1.5 rounded-full px-3 py-2 transition sm:px-3.5 sm:py-1.5 ${view === v ? "bg-ink text-bg" : "text-ink-3 hover:text-ink"}`}><Icon className="size-4" /><span className="hidden sm:inline">{l}</span><span className="sr-only sm:hidden">{l}</span></Link>
               ))}
             </div>
           </div>
@@ -126,7 +126,7 @@ export default async function Dashboard({ searchParams }: PageProps<"/dashboard"
               <KanbanBoard jobs={jobs} showSearch={!current} hrefs={Object.fromEntries(jobs.map((j) => [j.id, base({ job: j.id })]))} />
             </div>
           ) : (
-            <div className="mt-6 grid gap-4">
+            <div className="mt-5 grid gap-3 sm:mt-6 sm:gap-4 2xl:grid-cols-2">
               {jobs.map((j, i) => <JobCard key={j.id} job={j} index={i} showSearch={!current} href={base({ job: j.id })} />)}
               {jobs.length === 0 && <EmptyState hasSearches={searches.length > 0} current={!!current} filter={filter} running={current?.last_status === "running"} />}
             </div>
