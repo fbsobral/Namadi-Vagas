@@ -1,3 +1,6 @@
+# A versão deve bater com o playwright-core do package.json. ARG usado em FROM precisa vir antes do 1º FROM.
+ARG PLAYWRIGHT_VERSION=1.64.1
+
 # Build para Coolify / VPS (Next.js standalone)
 FROM node:22-alpine AS deps
 WORKDIR /app
@@ -18,8 +21,7 @@ ENV NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=$NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY \
     NEXT_TELEMETRY_DISABLED=1
 RUN npm run build
 
-# Imagem oficial do Playwright: já traz Chromium + dependências do sistema. A versão deve bater com playwright-core.
-ARG PLAYWRIGHT_VERSION=1.64.1
+# Imagem oficial do Playwright: já traz Chromium + dependências do sistema.
 FROM mcr.microsoft.com/playwright:v${PLAYWRIGHT_VERSION}-noble AS run
 WORKDIR /app
 ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 PORT=3000 HOSTNAME=0.0.0.0
