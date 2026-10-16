@@ -65,21 +65,20 @@ function DialogBody({ onClose, initial }: { onClose: () => void; initial?: Searc
         <p className="text-xs font-medium tracking-wider text-accent uppercase">{initial ? "Editar busca" : "Nova busca"}</p>
         <h2 className="font-display mt-1 text-4xl">{initial ? "Ajuste o radar" : "O que você procura?"}</h2>
 
-        <div className="mt-6"><QueryBuilder spec={f.spec} onChange={(spec) => set("spec", spec)} /></div>
+        <label className="mt-6 block">
+          <span className="mb-2 block text-sm font-medium">Nome da busca <span className="text-ink-3">(opcional)</span></span>
+          <input autoFocus value={f.name} onChange={(e) => set("name", e.target.value)} placeholder="Como aparece na barra lateral — se vazio, usa a 1ª palavra-chave" className="w-full rounded-xl border border-line bg-bg px-4 py-3 outline-none transition focus:border-accent focus:ring-4 focus:ring-accent/15" />
+        </label>
 
-        <div className="mt-5 grid gap-4 sm:grid-cols-2">
-          <label className="block">
-            <span className="mb-2 block text-sm font-medium">Nome da busca <span className="text-ink-3">(opcional)</span></span>
-            <input value={f.name} onChange={(e) => set("name", e.target.value)} placeholder="Como aparece na barra lateral" className="w-full rounded-xl border border-line bg-bg px-4 py-3 outline-none transition focus:border-accent focus:ring-4 focus:ring-accent/15" />
-          </label>
-          <label className="block">
-            <span className="mb-2 block text-sm font-medium">Local</span>
-            <div className="relative">
-              <MapPin className="absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-ink-3" />
-              <input value={f.location} onChange={(e) => set("location", e.target.value)} placeholder="São Paulo, remoto…" className="w-full rounded-xl border border-line bg-bg py-3 pr-4 pl-10 outline-none transition focus:border-accent focus:ring-4 focus:ring-accent/15" />
-            </div>
-          </label>
-        </div>
+        <div className="mt-5"><QueryBuilder spec={f.spec} onChange={(spec) => set("spec", spec)} /></div>
+
+        <label className="mt-5 block">
+          <span className="mb-2 block text-sm font-medium">Local</span>
+          <div className="relative">
+            <MapPin className="absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-ink-3" />
+            <input value={f.location} onChange={(e) => set("location", e.target.value)} placeholder="São Paulo, remoto…" className="w-full rounded-xl border border-line bg-bg py-3 pr-4 pl-10 outline-none transition focus:border-accent focus:ring-4 focus:ring-accent/15" />
+          </div>
+        </label>
 
         <fieldset className="mt-6">
           <legend className="mb-2 text-sm font-medium">Onde o robô procura</legend>

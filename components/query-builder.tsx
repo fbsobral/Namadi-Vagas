@@ -71,7 +71,7 @@ function GroupCard({ index, isLast, group, canRemove, onChange, onRemove }: { in
           {canRemove && <button type="button" onClick={onRemove} aria-label="Remover grupo" className="grid size-7 place-items-center rounded-full text-ink-3 transition hover:bg-surface-2 hover:text-accent"><X className="size-4" /></button>}
         </div>
       </div>
-      <ChipInput terms={group.terms} onChange={(terms) => onChange({ ...group, terms })} placeholder={group.terms.length ? "adicionar outro termo…" : 'ex.: Product Designer'} autoFocus={isLast} />
+      <ChipInput terms={group.terms} onChange={(terms) => onChange({ ...group, terms })} placeholder={group.terms.length ? "adicionar outro termo…" : 'ex.: Product Designer'} autoFocus={isLast && index > 0} />
     </div>
   );
 }
