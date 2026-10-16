@@ -126,7 +126,7 @@ export default async function Dashboard({ searchParams }: PageProps<"/dashboard"
               <KanbanBoard jobs={jobs} showSearch={!current} hrefs={Object.fromEntries(jobs.map((j) => [j.id, base({ job: j.id })]))} />
             </div>
           ) : (
-            <div className="mt-5 grid gap-3 sm:mt-6 sm:gap-4 2xl:grid-cols-2">
+            <div className="mt-5 grid gap-3 sm:mt-6 sm:gap-4">
               {jobs.map((j, i) => <JobCard key={j.id} job={j} index={i} showSearch={!current} href={base({ job: j.id })} />)}
               {jobs.length === 0 && <EmptyState hasSearches={searches.length > 0} current={!!current} filter={filter} running={current?.last_status === "running"} />}
             </div>
