@@ -1,11 +1,11 @@
 // Catálogo de fontes (client-safe). "web" = Google aberto, sem filtro de site.
 export type Source = { key: string; label: string; sites: string[]; hint?: string };
 
-// Só fontes comprovadas com o robô próprio. "Google aberto" já alcança qualquer outro site que tenha página de vaga.
+// LinkedIn e Gupy são lidos direto (sem Google). "Google aberto" alcança qualquer outro site com página de vaga.
 export const SOURCES: Source[] = [
-  { key: "web", label: "Google aberto", sites: [], hint: "qualquer site" },
-  { key: "linkedin", label: "LinkedIn", sites: ["linkedin.com/jobs/view"] },
-  { key: "gupy", label: "Gupy", sites: ["gupy.io"] },
+  { key: "linkedin", label: "LinkedIn", sites: ["linkedin.com/jobs/view"], hint: "leitura direta, aceita E/OU" },
+  { key: "gupy", label: "Gupy", sites: ["gupy.io"], hint: "leitura direta pela API" },
+  { key: "web", label: "Google aberto", sites: [], hint: "qualquer site; mais lento e pode pedir CAPTCHA" },
 ];
 
 export const FREQUENCIES = [

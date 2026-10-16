@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { Check, Clock, MapPin, X } from "lucide-react";
 import { createSearch, editSearch, type SearchInput } from "@/app/actions";
 import { buildGoogleQuery, FREQUENCIES, RECENCY, SOURCES } from "@/lib/sources";
-import { emptySpec, hasTerms, parseSpec, specToQuery } from "@/lib/query";
+import { emptySpec, hasTerms, parseSpec, specToBoolean, specToQuery } from "@/lib/query";
 import { QueryBuilder } from "./query-builder";
 import type { Search } from "@/lib/types";
 
@@ -32,8 +32,9 @@ function DialogBody({ onClose, initial }: { onClose: () => void; initial?: Searc
     return () => { window.removeEventListener("keydown", k); document.body.style.overflow = ""; };
   }, [onClose]);
 
-  const preview = useMemo(() => buildGoogleQuery(specToQuery(f.spec) || "…", f.location, f.sources), [f]);
-  const perMonth = Math.round((30 * 24 * 60) / f.freq_minutes) * 2; // 2 páginas por rodada
+  const googleQ = useMemo(() => buildGoogleQuery(specToQuery(f.spec) || "…", f.location, ["web"]), [f]);
+  const boolQ = useMemo(() => specToBoolean(f.spec) || "…", [f]);
+  const perMonth = Math.round((30 * 24 * 60) / f.freq_minutes);
   const set = <K extends keyof SearchInput>(k: K, v: SearchInput[K]) => setF((p) => ({ ...p, [k]: v }));
   const toggleSource = (k: string) =>
     set("sources", f.sources.includes(k) ? f.sources.filter((x) => x !== k) : [...f.sources, k]);
@@ -93,6 +94,7 @@ function DialogBody({ onClose, initial }: { onClose: () => void; initial?: Searc
               );
             })}
           </div>
+          <p className="mt-2 text-xs text-ink-3">LinkedIn e Gupy são lidos direto: rápido, sem CAPTCHA. Google aberto cobre qualquer outro site, mas é mais lento e pode pedir CAPTCHA.</p>
         </fieldset>
 
         <div className="mt-6 grid gap-6 sm:grid-cols-2">
@@ -113,10 +115,12 @@ function DialogBody({ onClose, initial }: { onClose: () => void; initial?: Searc
           </div>
         </div>
 
-        <div className="mt-6 rounded-2xl bg-surface-2 p-4">
-          <p className="text-xs font-medium tracking-wider text-ink-3 uppercase">Consulta enviada ao Google</p>
-          <p className="mt-1.5 font-mono text-[13px] leading-relaxed break-words text-ink-2">{preview}</p>
-          <p className="mt-2 text-xs text-ink-3">≈ {perMonth.toLocaleString("pt-BR")} consultas por mês nesta frequência.</p>
+        <div className="mt-6 space-y-3 rounded-2xl bg-surface-2 p-4">
+          <p className="text-xs font-medium tracking-wider text-ink-3 uppercase">O que o robô vai buscar</p>
+          {f.sources.includes("linkedin") && <Line label="LinkedIn" text={boolQ} />}
+          {f.sources.includes("gupy") && <Line label="Gupy" text={`cada termo é buscado e o resultado filtrado por: ${boolQ}`} />}
+          {(f.sources.includes("web") || !f.sources.some((x) => x === "linkedin" || x === "gupy")) && <Line label="Google" text={googleQ} />}
+          <p className="text-xs text-ink-3">≈ {perMonth.toLocaleString("pt-BR")} rodadas por mês nesta frequência.</p>
         </div>
 
         {error && <p role="alert" className="mt-4 rounded-xl bg-accent-soft px-4 py-3 text-sm text-accent">{error}</p>}
@@ -130,6 +134,15 @@ function DialogBody({ onClose, initial }: { onClose: () => void; initial?: Searc
       </form>
     </div>,
     document.body,
+  );
+}
+
+function Line({ label, text }: { label: string; text: string }) {
+  return (
+    <p className="text-[13px] leading-relaxed text-ink-2">
+      <span className="mr-2 rounded-full bg-surface px-2 py-0.5 text-[11px] font-semibold text-ink-3">{label}</span>
+      <span className="font-mono break-words">{text}</span>
+    </p>
   );
 }
 
@@ -148,5 +161,5 @@ function Segment({ label, value, onChange, options }: { label: string; value: st
 }
 
 function blank(): SearchInput {
-  return { name: "", spec: emptySpec(), location: "", sources: ["web"], recency: "week", freq_minutes: 360 };
+  return { name: "", spec: emptySpec(), location: "", sources: ["linkedin", "gupy"], recency: "week", freq_minutes: 360 };
 }

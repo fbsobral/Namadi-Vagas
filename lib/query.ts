@@ -60,3 +60,53 @@ export function cleanSpec(spec: QuerySpec): QuerySpec {
     exclude: clean(spec.exclude ?? [], 10),
   };
 }
+
+/* ---------- usos por fontes diretas (LinkedIn / Gupy) ---------- */
+
+const quoteB = (t: string) => {
+  const s = t.trim().replace(/^-+/, "").replace(/"/g, "");
+  return /\s/.test(s) ? `"${s}"` : s;
+};
+
+/** Sintaxe booleana do LinkedIn: ("a" OR b) AND c NOT x */
+export function specToBoolean(spec: QuerySpec): string {
+  const groups = spec.groups.map((g) => ({ op: g.op, terms: g.terms.map(quoteB).filter(Boolean) })).filter((g) => g.terms.length);
+  const parts = groups.map((g) => (g.terms.length === 1 ? g.terms[0] : `(${g.terms.join(` ${g.op} `)})`));
+  const main = parts.join(` ${spec.between} `);
+  const not = spec.exclude.map(quoteB).filter(Boolean).map((t) => `NOT ${t}`);
+  return [main, ...not].join(" ").trim();
+}
+
+const norm = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+const has = (text: string, term: string) => {
+  const t = norm(term.trim().replace(/^"|"$/g, ""));
+  if (!t) return false;
+  return new RegExp(`(^|[^a-z0-9])${t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}([^a-z0-9]|$)`).test(text);
+};
+
+/** Avalia a busca (E/OU/exclusões) contra um texto, ignorando acentos e maiúsculas. */
+export function matchSpec(spec: QuerySpec, rawText: string): boolean {
+  const text = norm(rawText);
+  const groups = spec.groups.filter((g) => g.terms.some((t) => t.trim()));
+  if (spec.exclude.some((t) => has(text, t))) return false;
+  if (!groups.length) return true;
+  const ok = groups.map((g) => (g.op === "OR" ? g.terms.some((t) => has(text, t)) : g.terms.every((t) => has(text, t))));
+  return spec.between === "OR" ? ok.some(Boolean) : ok.every(Boolean);
+}
+
+/**
+ * Termos para consultar APIs que só aceitam texto simples; o resultado é filtrado depois com matchSpec.
+ * Com E entre grupos, combina os termos dos dois primeiros grupos (ex.: "marketing sênior", "marketing especialista").
+ */
+export function driverTerms(spec: QuerySpec, max = 6): string[] {
+  const groups = spec.groups.filter((g) => g.terms.some((t) => t.trim()));
+  const pick = (g: Group) => (g.op === "OR" ? g.terms : [g.terms.join(" ")]).map((t) => t.trim().replace(/^"|"$/g, "")).filter(Boolean);
+  let out: string[];
+  if (spec.between === "OR") out = groups.flatMap(pick);
+  else if (groups.length >= 2) out = pick(groups[0]).flatMap((a) => pick(groups[1]).map((b) => `${a} ${b}`)).concat(pick(groups[0]));
+  else out = groups.length ? pick(groups[0]) : [];
+  return [...new Set(out)].slice(0, max);
+}
+
+/** True se o texto contém algum termo excluído. */
+export const hitsExclusion = (spec: QuerySpec, text: string) => !matchSpec({ groups: [], between: "AND", exclude: spec.exclude }, text);

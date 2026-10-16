@@ -17,7 +17,7 @@ const JOB_HOSTS: [RegExp, string][] = [
 // Padrões de URL que identificam a página de UMA vaga (não listagem, não artigo, não "carreiras" genérico).
 const SINGLE_JOB_URL: [RegExp, RegExp][] = [
   [/linkedin\.com/, /\/jobs\/view\//],
-  [/gupy\.io/, /\/jobs\/\d+/],
+  [/gupy\.io/, /\/jobs?\/(\d+|[A-Za-z0-9_-]{20,})/],
   [/greenhouse\.io/, /\/jobs\/\d+|gh_jid=/],
   [/lever\.co/, /\/[^/]+\/[0-9a-f]{8}-[0-9a-f]{4}-/],
   [/ashbyhq\.com/, /\/[^/]+\/[0-9a-f]{8}-[0-9a-f]{4}-/],

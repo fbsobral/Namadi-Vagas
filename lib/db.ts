@@ -47,6 +47,9 @@ CREATE TABLE IF NOT EXISTS jobs (
 CREATE INDEX IF NOT EXISTS idx_jobs_user ON jobs(user_id, found_at DESC);
 CREATE INDEX IF NOT EXISTS idx_jobs_search ON jobs(search_id, found_at DESC);
 
+-- buscas antigas só com Google passam a usar também os leitores diretos de LinkedIn e Gupy
+UPDATE searches SET sources='["linkedin","gupy","web"]' WHERE sources='["web"]';
+
 ALTER TABLE jobs ADD COLUMN IF NOT EXISTS stage TEXT;
 ALTER TABLE jobs ADD COLUMN IF NOT EXISTS stage_pos INTEGER NOT NULL DEFAULT 0;
 UPDATE jobs SET stage='todo' WHERE favorite=1 AND stage IS NULL;
@@ -84,6 +87,7 @@ CREATE TABLE IF NOT EXISTS runs (
   error TEXT
 );
 ALTER TABLE runs ADD COLUMN IF NOT EXISTS raw_count INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE runs ADD COLUMN IF NOT EXISTS note TEXT;
 CREATE INDEX IF NOT EXISTS idx_runs_search ON runs(search_id, started_at DESC);
 `;
 
@@ -201,18 +205,18 @@ export async function claimSearch(id: string) {
 }
 
 /** Em caso de erro tenta de novo logo (no máx. 30 min); em caso de sucesso espera a frequência escolhida. */
-export function markRunEnd(id: string, error: string | null, freqMinutes: number) {
+export function markRunEnd(id: string, error: string | null, freqMinutes: number, retrySoon = false) {
   const now = Date.now();
-  const wait = error ? Math.min(freqMinutes, 30) : freqMinutes;
+  const wait = error || retrySoon ? Math.min(freqMinutes, 30) : freqMinutes;
   return run(
     "UPDATE searches SET last_status=?, last_error=?, last_run_at=?, next_run_at=?, locked_at=NULL WHERE id=?",
     error ? "error" : "ok", error, now, now + wait * 60000, id,
   );
 }
 
-export type RunRow = { id: number; started_at: number; finished_at: number | null; new_count: number; total_count: number; raw_count: number; error: string | null };
+export type RunRow = { id: number; started_at: number; finished_at: number | null; new_count: number; total_count: number; raw_count: number; note: string | null; error: string | null };
 export const listRuns = (searchId: string, limit = 8) =>
-  all<RunRow>("SELECT id, started_at, finished_at, new_count, total_count, raw_count, error FROM runs WHERE search_id=? ORDER BY started_at DESC LIMIT " + Number(limit), searchId);
+  all<RunRow>("SELECT id, started_at, finished_at, new_count, total_count, raw_count, note, error FROM runs WHERE search_id=? ORDER BY started_at DESC LIMIT " + Number(limit), searchId);
 
 /* ---------- sinal de vida ---------- */
 
@@ -220,9 +224,9 @@ export const setKv = (key: string, value: string) =>
   run("INSERT INTO kv (key,value,updated_at) VALUES (?,?,?) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value, updated_at=EXCLUDED.updated_at", key, value, Date.now());
 export const getKv = (key: string) => get<{ value: string; updated_at: number }>("SELECT value, updated_at FROM kv WHERE key=?", key);
 
-export const logRun = (searchId: string, startedAt: number, newCount: number, total: number, error: string | null, raw = 0) =>
-  run("INSERT INTO runs (search_id,started_at,finished_at,new_count,total_count,raw_count,error) VALUES (?,?,?,?,?,?,?)",
-    searchId, startedAt, Date.now(), newCount, total, raw, error);
+export const logRun = (searchId: string, startedAt: number, newCount: number, total: number, error: string | null, raw = 0, note: string | null = null) =>
+  run("INSERT INTO runs (search_id,started_at,finished_at,new_count,total_count,raw_count,note,error) VALUES (?,?,?,?,?,?,?,?)",
+    searchId, startedAt, Date.now(), newCount, total, raw, note, error);
 
 /* ---------- jobs ---------- */
 
@@ -309,7 +313,7 @@ export async function moveJob(userId: string, id: string, stage: string, index: 
 }
 
 export const jobsForCleanup = (searchId: string) =>
-  all<Pick<Job, "id" | "title" | "url" | "snippet">>("SELECT id, title, url, snippet FROM jobs WHERE search_id=? AND favorite=0", searchId);
+  all<Pick<Job, "id" | "title" | "url" | "snippet" | "source">>("SELECT id, title, url, snippet, source FROM jobs WHERE search_id=? AND favorite=0", searchId);
 export const deleteJobs = async (ids: string[]) => {
   if (ids.length) await run(`DELETE FROM jobs WHERE id IN (${ids.map(() => "?").join(",")})`, ...ids);
 };

@@ -6,7 +6,8 @@ import { UserButton } from "@clerk/nextjs";
 import { AlertTriangle, Columns3, LayoutList, Radar as RadarIcon, Star } from "lucide-react";
 import { getJob, getKv, jobCounts, listContacts, listJobs, listRuns, listSearches, type JobFilter } from "@/lib/db";
 import { isDemoMode } from "@/lib/serp";
-import { buildGoogleQuery, freqLabel } from "@/lib/sources";
+import { freqLabel, sourceLabel } from "@/lib/sources";
+import { parseSpec, specToBoolean } from "@/lib/query";
 import { isFresh, timeAgo } from "@/lib/format";
 import { Sidebar } from "@/components/sidebar";
 import { SearchToolbar } from "@/components/search-toolbar";
@@ -89,7 +90,7 @@ export default async function Dashboard({ searchParams }: PageProps<"/dashboard"
             <h1 className="font-display mt-1 text-4xl leading-none break-words sm:text-6xl">{title}</h1>
             {current ? (
               <>
-                <p className="mt-3 max-w-2xl font-mono text-[13px] leading-relaxed text-ink-3">{buildGoogleQuery(current.query, current.location, sources)}</p>
+                <p className="mt-3 max-w-2xl font-mono text-[13px] leading-relaxed text-ink-3">{specToBoolean(parseSpec(current.query_spec, current.query))}{current.location ? ` · ${current.location}` : ""} · {sources.map(sourceLabel).join(", ")}</p>
                 <p className="mt-2 text-sm text-ink-3">
                   Última rodada {timeAgo(current.last_run_at)}{current.active && current.next_run_at ? ` · próxima ${timeAgo(current.next_run_at)}` : ""}
                 </p>
