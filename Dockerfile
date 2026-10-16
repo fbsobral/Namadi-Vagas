@@ -30,6 +30,8 @@ ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 PORT=3000 HOSTNAME=0.0.0.0
 COPY --from=build /app/public ./public
 COPY --from=build /app/.next/standalone ./
 COPY --from=build /app/.next/static ./.next/static
+# O tracing do Next não copia browsers.json & cia.: leva o pacote do Playwright inteiro
+COPY --from=build /app/node_modules/playwright-core ./node_modules/playwright-core
 # O robô abre o Chromium: dê ao container --ipc=host (ou shm_size >= 1gb) se o Chromium cair
 EXPOSE 3000
 # Healthcheck rápido: o Coolify libera o novo container assim que responde

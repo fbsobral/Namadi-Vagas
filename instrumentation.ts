@@ -4,7 +4,15 @@ export async function register() {
   if (process.env.NEXT_RUNTIME !== "nodejs" || process.env.DISABLE_INTERNAL_SCHEDULER) return;
   const g = globalThis as unknown as { __vagasTick?: NodeJS.Timeout };
   if (g.__vagasTick) return;
-  const { runDue, beat } = await import("./lib/runner");
+  // Se o agendador falhar ao carregar, o site continua no ar (e o painel mostra "Robô parado").
+  let mod: typeof import("./lib/runner");
+  try {
+    mod = await import("./lib/runner");
+  } catch (e) {
+    console.error("[robô] não consegui iniciar o agendador:", e);
+    return;
+  }
+  const { runDue, beat } = mod;
   let busy = false;
   const tick = async () => {
     if (busy) return;
