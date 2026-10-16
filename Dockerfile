@@ -18,11 +18,14 @@ ENV NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=$NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY \
     NEXT_TELEMETRY_DISABLED=1
 RUN npm run build
 
-FROM node:22-alpine AS run
+# Imagem oficial do Playwright: já traz Chromium + dependências do sistema. A versão deve bater com playwright-core.
+ARG PLAYWRIGHT_VERSION=1.64.1
+FROM mcr.microsoft.com/playwright:v${PLAYWRIGHT_VERSION}-noble AS run
 WORKDIR /app
 ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 PORT=3000 HOSTNAME=0.0.0.0
 COPY --from=build /app/public ./public
 COPY --from=build /app/.next/standalone ./
 COPY --from=build /app/.next/static ./.next/static
+# O robô abre o Chromium: dê ao container --ipc=host (ou shm_size >= 1gb) se o Chromium cair
 EXPOSE 3000
 CMD ["node", "server.js"]

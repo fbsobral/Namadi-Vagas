@@ -24,9 +24,14 @@ export async function runSearch(searchId: string): Promise<{ added: number; tota
   try {
     const sources = JSON.parse(s.sources) as string[];
     const q = buildGoogleQuery(s.query, s.location, sources);
-    const results = isDemoMode()
-      ? demoJobs(s.query, s.location)
-      : (await Promise.all([1, 2].map((page) => googleSearch(q, { recency: s.recency, page }).catch((e) => (page === 1 ? Promise.reject(e) : []))))).flat();
+    let results: Awaited<ReturnType<typeof googleSearch>>;
+    if (isDemoMode()) {
+      results = demoJobs(s.query, s.location);
+    } else {
+      // 2ª página só se a 1ª veio cheia — menos requisições = menos chance de CAPTCHA
+      results = await googleSearch(q, { recency: s.recency, page: 1 });
+      if (results.length >= 8) results = results.concat(await googleSearch(q, { recency: s.recency, page: 2 }).catch(() => []));
+    }
 
     const seen = new Set<string>();
     for (const r of results) {

@@ -1,7 +1,7 @@
 import "server-only";
 import type { SerpResult } from "./serp";
 
-// Dados FICTÍCIOS usados apenas quando não há SERPER_API_KEY, para você ver o app funcionando.
+// Dados FICTÍCIOS usados apenas com DEMO_MODE=1, para você ver o app funcionando.
 const COMPANIES = ["Nubank", "iFood", "Stone", "QuintoAndar", "Mercado Livre", "Creditas", "VTEX", "Hotmart", "Loft", "Gupy", "Dock", "Ambev Tech"];
 const LEVELS = ["Pleno", "Sênior", "Júnior", "Staff", "Lead"];
 const WHERE = ["São Paulo, SP", "Remoto — Brasil", "Belo Horizonte, MG", "Curitiba, PR", "Híbrido — Rio de Janeiro"];

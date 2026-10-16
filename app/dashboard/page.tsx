@@ -61,7 +61,7 @@ export default async function Dashboard({ searchParams }: PageProps<"/dashboard"
           {isDemoMode() && (
             <div role="note" className="anim-rise mb-6 flex items-start gap-3 rounded-2xl border border-accent/30 bg-accent-soft px-4 py-3 text-sm">
               <AlertTriangle className="mt-0.5 size-4 shrink-0 text-accent" />
-              <p><strong>Modo demonstração.</strong> Defina <code className="rounded bg-surface px-1.5 py-0.5 font-mono text-xs">SERPER_API_KEY</code> para o robô buscar vagas reais no Google. As vagas abaixo são fictícias.</p>
+              <p><strong>Modo demonstração</strong> (<code className="rounded bg-surface px-1.5 py-0.5 font-mono text-xs">DEMO_MODE=1</code>). As vagas e contatos abaixo são fictícios. Remova a variável para o robô buscar de verdade.</p>
             </div>
           )}
 
