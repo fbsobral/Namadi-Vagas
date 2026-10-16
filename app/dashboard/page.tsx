@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { currentUser } from "@clerk/nextjs/server";
 import { getUserId } from "@/lib/auth";
 import { UserButton } from "@clerk/nextjs";
-import { AlertTriangle, Radar as RadarIcon, Star } from "lucide-react";
+import { AlertTriangle, Columns3, LayoutList, Radar as RadarIcon, Star } from "lucide-react";
 import { getJob, getKv, jobCounts, listContacts, listJobs, listRuns, listSearches, type JobFilter } from "@/lib/db";
 import { isDemoMode } from "@/lib/serp";
 import { buildGoogleQuery, freqLabel } from "@/lib/sources";
@@ -15,6 +15,7 @@ import { JobDrawer } from "@/components/job-drawer";
 import { AutoRefresh } from "@/components/auto-refresh";
 import { RobotStatus, RunHistory } from "@/components/robot-status";
 import { NewSearchButton } from "@/components/new-search-button";
+import { KanbanBoard } from "@/components/kanban-board";
 
 export const dynamic = "force-dynamic";
 
@@ -26,7 +27,8 @@ export default async function Dashboard({ searchParams }: PageProps<"/dashboard"
 
   const [searches, counts, user] = await Promise.all([listSearches(userId), jobCounts(userId), currentUser()]);
   const current = searches.find((s) => s.id === one("s")) ?? null;
-  const filter: JobFilter = one("f") === "new" ? "new" : one("f") === "fav" ? "fav" : "all";
+  const view = one("v") === "board" ? "board" : "list";
+  const filter: JobFilter = view === "board" ? "board" : one("f") === "new" ? "new" : one("f") === "fav" ? "fav" : "all";
   const jobs = await listJobs(userId, { searchId: current?.id, filter });
   const [beat, runs] = await Promise.all([getKv("scheduler_heartbeat"), current ? listRuns(current.id) : Promise.resolve([])]);
   const jobId = one("job");
@@ -36,9 +38,19 @@ export default async function Dashboard({ searchParams }: PageProps<"/dashboard"
   const base = (extra: Record<string, string | null> = {}) => {
     const p = new URLSearchParams();
     if (current) p.set("s", current.id);
-    const f = "f" in extra ? extra.f : filter === "all" ? null : filter;
-    if (f) p.set("f", f);
+    if (view === "board") p.set("v", "board");
+    const f = "f" in extra ? extra.f : filter === "all" || filter === "board" ? null : filter;
+    if (f && view !== "board") p.set("f", f);
     if (extra.job) p.set("job", extra.job);
+    const q = p.toString();
+    return `/dashboard${q ? `?${q}` : ""}`;
+  };
+
+  const viewHref = (v: "list" | "board") => {
+    const p = new URLSearchParams();
+    if (current) p.set("s", current.id);
+    if (v === "board") p.set("v", "board");
+    else if (one("f") === "new" || one("f") === "fav") p.set("f", one("f")!);
     const q = p.toString();
     return `/dashboard${q ? `?${q}` : ""}`;
   };
@@ -50,7 +62,7 @@ export default async function Dashboard({ searchParams }: PageProps<"/dashboard"
   return (
     <div className="relative z-10 flex min-h-dvh flex-col lg:flex-row">
       <AutoRefresh active={anyRunning} />
-      <Sidebar searches={searches} counts={counts} currentId={current?.id ?? null} filter={filter}>
+      <Sidebar searches={searches} counts={counts} currentId={current?.id ?? null} filter={filter} view={view}>
         <UserButton />
         <div className="min-w-0 text-sm">
           <p className="truncate font-medium">{user?.firstName ?? user?.username ?? "Você"}</p>
@@ -59,7 +71,7 @@ export default async function Dashboard({ searchParams }: PageProps<"/dashboard"
       </Sidebar>
 
       <main className="min-w-0 flex-1 px-4 pt-8 pb-24 sm:px-8 lg:px-12">
-        <div className="mx-auto max-w-4xl">
+        <div className={`mx-auto ${view === "board" ? "max-w-[1500px]" : "max-w-4xl"}`}>
           {isDemoMode() && (
             <div role="note" className="anim-rise mb-6 flex items-start gap-3 rounded-2xl border border-accent/30 bg-accent-soft px-4 py-3 text-sm">
               <AlertTriangle className="mt-0.5 size-4 shrink-0 text-accent" />
@@ -90,19 +102,35 @@ export default async function Dashboard({ searchParams }: PageProps<"/dashboard"
             )}
           </header>
 
-          {filter !== "fav" || current ? (
-            <div className="mt-8 flex gap-1 border-b border-line" role="tablist">
-              {([["all", "Todas"], ["new", "Novas"], ["fav", "Favoritas"]] as const).map(([k, l]) => (
-                <Link key={k} href={base({ f: k === "all" ? null : k })} role="tab" aria-selected={filter === k}
-                  className={`-mb-px border-b-2 px-4 py-3 text-sm font-medium transition ${filter === k ? "border-accent text-ink" : "border-transparent text-ink-3 hover:text-ink"}`}>{l}</Link>
+          <div className="mt-8 flex flex-wrap items-end justify-between gap-3 border-b border-line">
+            {view === "list" ? (
+              <div className="flex gap-1" role="tablist">
+                {([["all", "Todas"], ["new", "Novas"], ["fav", "Favoritas"]] as const).map(([k, l]) => (
+                  <Link key={k} href={base({ f: k === "all" ? null : k })} role="tab" aria-selected={filter === k}
+                    className={`-mb-px border-b-2 px-4 py-3 text-sm font-medium transition ${filter === k ? "border-accent text-ink" : "border-transparent text-ink-3 hover:text-ink"}`}>{l}</Link>
+                ))}
+              </div>
+            ) : (
+              <p className="pb-3 text-sm text-ink-3">Arraste as vagas entre as etapas da candidatura.</p>
+            )}
+            <div role="group" aria-label="Visualização" className="mb-2 inline-flex rounded-full border border-line bg-surface p-0.5 text-sm font-medium">
+              {([["list", "Lista", LayoutList], ["board", "Kanban", Columns3]] as const).map(([v, l, Icon]) => (
+                <Link key={v} href={viewHref(v)} aria-current={view === v} scroll={false}
+                  className={`inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 transition ${view === v ? "bg-ink text-bg" : "text-ink-3 hover:text-ink"}`}><Icon className="size-4" />{l}</Link>
               ))}
             </div>
-          ) : <div className="mt-8 border-b border-line" />}
-
-          <div className="mt-6 grid gap-4">
-            {jobs.map((j, i) => <JobCard key={j.id} job={j} index={i} showSearch={!current} href={base({ job: j.id })} />)}
-            {jobs.length === 0 && <EmptyState hasSearches={searches.length > 0} current={!!current} filter={filter} running={current?.last_status === "running"} />}
           </div>
+
+          {view === "board" ? (
+            <div className="mt-6">
+              <KanbanBoard jobs={jobs} showSearch={!current} hrefs={Object.fromEntries(jobs.map((j) => [j.id, base({ job: j.id })]))} />
+            </div>
+          ) : (
+            <div className="mt-6 grid gap-4">
+              {jobs.map((j, i) => <JobCard key={j.id} job={j} index={i} showSearch={!current} href={base({ job: j.id })} />)}
+              {jobs.length === 0 && <EmptyState hasSearches={searches.length > 0} current={!!current} filter={filter} running={current?.last_status === "running"} />}
+            </div>
+          )}
         </div>
       </main>
 

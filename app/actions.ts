@@ -8,10 +8,12 @@ import * as q from "@/lib/db";
 import { runSearch } from "@/lib/runner";
 import { findContacts } from "@/lib/contacts";
 import { PALETTE, SOURCES } from "@/lib/sources";
+import { isStage } from "@/lib/stages";
+import { cleanSpec, specToQuery, type QuerySpec } from "@/lib/query";
 
 export type SearchInput = {
   name: string;
-  query: string;
+  spec: QuerySpec;
   location: string;
   sources: string[];
   recency: "day" | "week" | "month" | "any";
@@ -25,13 +27,15 @@ async function uid() {
 }
 
 function sanitize(i: SearchInput) {
-  const query = i.query.trim().slice(0, 300);
-  if (!query) throw new Error("Informe as palavras-chave da busca");
+  const spec = cleanSpec(i.spec);
+  const query = specToQuery(spec).slice(0, 400);
+  if (!query) throw new Error("Adicione pelo menos uma palavra-chave");
   const valid = new Set(SOURCES.map((s) => s.key));
   const sources = i.sources.filter((s) => valid.has(s));
   return {
-    name: (i.name.trim() || query).slice(0, 80),
+    name: (i.name.trim() || spec.groups[0]?.terms[0] || query).slice(0, 80),
     query,
+    query_spec: JSON.stringify(spec),
     location: i.location.trim().slice(0, 80),
     sources: JSON.stringify(sources.length ? sources : ["web"]),
     recency: (["day", "week", "month", "any"].includes(i.recency) ? i.recency : "week") as SearchInput["recency"],
@@ -99,5 +103,11 @@ export async function seeJob(jobId: string) {
 
 export async function seeAll(searchId: string | null) {
   await q.markAllSeen(await uid(), searchId);
+  refresh();
+}
+
+export async function moveJobStage(jobId: string, stage: string, index: number) {
+  if (!isStage(stage)) throw new Error("Etapa inválida");
+  await q.moveJob(await uid(), jobId, stage, index);
   refresh();
 }

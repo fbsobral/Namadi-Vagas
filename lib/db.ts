@@ -47,6 +47,10 @@ CREATE TABLE IF NOT EXISTS jobs (
 CREATE INDEX IF NOT EXISTS idx_jobs_user ON jobs(user_id, found_at DESC);
 CREATE INDEX IF NOT EXISTS idx_jobs_search ON jobs(search_id, found_at DESC);
 
+ALTER TABLE jobs ADD COLUMN IF NOT EXISTS stage TEXT;
+ALTER TABLE jobs ADD COLUMN IF NOT EXISTS stage_pos INTEGER NOT NULL DEFAULT 0;
+UPDATE jobs SET stage='todo' WHERE favorite=1 AND stage IS NULL;
+
 CREATE TABLE IF NOT EXISTS contacts (
   id TEXT PRIMARY KEY,
   job_id TEXT NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
@@ -62,6 +66,7 @@ CREATE TABLE IF NOT EXISTS contacts (
 );
 
 ALTER TABLE searches ADD COLUMN IF NOT EXISTS locked_at BIGINT;
+ALTER TABLE searches ADD COLUMN IF NOT EXISTS query_spec TEXT;
 
 CREATE TABLE IF NOT EXISTS kv (
   key TEXT PRIMARY KEY,
@@ -148,19 +153,19 @@ export const getSearchById = (id: string) => get<Search>("SELECT * FROM searches
 export async function insertSearch(s: Omit<Search, "last_run_at" | "last_status" | "last_error" | "created_at" | "next_run_at">) {
   const now = Date.now();
   await run(
-    `INSERT INTO searches (id,user_id,name,query,location,sources,recency,freq_minutes,active,color,next_run_at,created_at)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
-    s.id, s.user_id, s.name, s.query, s.location, s.sources, s.recency, s.freq_minutes, s.active, s.color, now, now,
+    `INSERT INTO searches (id,user_id,name,query,query_spec,location,sources,recency,freq_minutes,active,color,next_run_at,created_at)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+    s.id, s.user_id, s.name, s.query, s.query_spec, s.location, s.sources, s.recency, s.freq_minutes, s.active, s.color, now, now,
   );
 }
 
-export async function updateSearch(userId: string, id: string, s: Pick<Search, "name" | "query" | "location" | "sources" | "recency" | "freq_minutes">) {
+export async function updateSearch(userId: string, id: string, s: Pick<Search, "name" | "query" | "query_spec" | "location" | "sources" | "recency" | "freq_minutes">) {
   const cur = await getSearch(userId, id);
   if (!cur) return;
   const next = cur.active ? (cur.last_run_at ?? Date.now()) + s.freq_minutes * 60000 : cur.next_run_at;
   await run(
-    "UPDATE searches SET name=?, query=?, location=?, sources=?, recency=?, freq_minutes=?, next_run_at=? WHERE id=? AND user_id=?",
-    s.name, s.query, s.location, s.sources, s.recency, s.freq_minutes, next, id, userId,
+    "UPDATE searches SET name=?, query=?, query_spec=?, location=?, sources=?, recency=?, freq_minutes=?, next_run_at=? WHERE id=? AND user_id=?",
+    s.name, s.query, s.query_spec, s.location, s.sources, s.recency, s.freq_minutes, next, id, userId,
   );
 }
 
@@ -218,7 +223,7 @@ export const logRun = (searchId: string, startedAt: number, newCount: number, to
 
 /* ---------- jobs ---------- */
 
-export type JobFilter = "all" | "new" | "fav";
+export type JobFilter = "all" | "new" | "fav" | "board";
 
 export function listJobs(userId: string, opts: { searchId?: string | null; filter: JobFilter; limit?: number }) {
   const where = ["j.user_id = ?"];
@@ -226,7 +231,8 @@ export function listJobs(userId: string, opts: { searchId?: string | null; filte
   if (opts.searchId) { where.push("j.search_id = ?"); params.push(opts.searchId); }
   if (opts.filter === "new") where.push("j.seen = 0");
   if (opts.filter === "fav") where.push("j.favorite = 1");
-  const order = opts.filter === "fav" ? "j.favorited_at DESC" : "j.found_at DESC, j.id DESC";
+  if (opts.filter === "board") where.push("j.stage IS NOT NULL");
+  const order = opts.filter === "fav" ? "j.favorited_at DESC" : opts.filter === "board" ? "j.stage_pos ASC, j.favorited_at DESC" : "j.found_at DESC, j.id DESC";
   return all<Job>(
     `SELECT j.*, s.name AS search_name, s.color AS search_color FROM jobs j
      JOIN searches s ON s.id = j.search_id WHERE ${where.join(" AND ")} ORDER BY ${order} LIMIT ${Number(opts.limit ?? 120)}`,
@@ -262,8 +268,48 @@ export async function insertJob(j: Pick<Job, "id" | "user_id" | "search_id" | "t
   return (r.rowCount ?? 0) > 0;
 }
 
-export const setFavorite = (userId: string, id: string, fav: boolean) =>
-  run("UPDATE jobs SET favorite=?, favorited_at=?, seen=1 WHERE id=? AND user_id=?", fav ? 1 : 0, fav ? Date.now() : null, id, userId);
+export async function setFavorite(userId: string, id: string, fav: boolean) {
+  if (!fav) {
+    await run("UPDATE jobs SET favorite=0, favorited_at=NULL, stage=NULL, seen=1 WHERE id=? AND user_id=?", id, userId);
+    return;
+  }
+  // favoritar = querer se candidatar: entra no fim da primeira coluna do kanban
+  await run(
+    `UPDATE jobs SET favorite=1, favorited_at=?, seen=1,
+       stage = COALESCE(stage, 'todo'),
+       stage_pos = CASE WHEN stage IS NULL THEN COALESCE((SELECT MAX(stage_pos)+1 FROM jobs WHERE user_id=? AND stage='todo'), 0) ELSE stage_pos END
+     WHERE id=? AND user_id=?`,
+    Date.now(), userId, id, userId,
+  );
+}
+
+/** Move uma vaga para uma etapa, na posição `index`, renumerando a coluna destino. */
+export async function moveJob(userId: string, id: string, stage: string, index: number) {
+  await ready();
+  const c = await pool().connect();
+  try {
+    await c.query("BEGIN");
+    const own = await c.query("SELECT 1 FROM jobs WHERE id=$1 AND user_id=$2 AND favorite=1", [id, userId]);
+    if (!own.rowCount) throw new Error("Vaga não encontrada");
+    const col = (await c.query("SELECT id FROM jobs WHERE user_id=$1 AND stage=$2 AND id<>$3 ORDER BY stage_pos ASC, favorited_at DESC", [userId, stage, id])).rows.map((r) => r.id as string);
+    col.splice(Math.min(Math.max(index, 0), col.length), 0, id);
+    for (let i = 0; i < col.length; i++) {
+      await c.query("UPDATE jobs SET stage_pos=$1, stage=$2 WHERE id=$3", [i, stage, col[i]]);
+    }
+    await c.query("COMMIT");
+  } catch (e) {
+    await c.query("ROLLBACK").catch(() => {});
+    throw e;
+  } finally {
+    c.release();
+  }
+}
+
+export const jobsForCleanup = (searchId: string) =>
+  all<Pick<Job, "id" | "title" | "url" | "snippet">>("SELECT id, title, url, snippet FROM jobs WHERE search_id=? AND favorite=0", searchId);
+export const deleteJobs = async (ids: string[]) => {
+  if (ids.length) await run(`DELETE FROM jobs WHERE id IN (${ids.map(() => "?").join(",")})`, ...ids);
+};
 
 export const markSeen = (userId: string, id: string) => run("UPDATE jobs SET seen=1 WHERE id=? AND user_id=?", id, userId);
 

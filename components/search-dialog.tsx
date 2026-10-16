@@ -1,13 +1,14 @@
 "use client";
 
 import { useEffect, useMemo, useState, useTransition } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
-import { Check, Clock, MapPin, Search as SearchIcon, X } from "lucide-react";
+import { Check, Clock, MapPin, X } from "lucide-react";
 import { createSearch, editSearch, type SearchInput } from "@/app/actions";
 import { buildGoogleQuery, FREQUENCIES, RECENCY, SOURCES } from "@/lib/sources";
+import { emptySpec, hasTerms, parseSpec, specToQuery } from "@/lib/query";
+import { QueryBuilder } from "./query-builder";
 import type { Search } from "@/lib/types";
-
-const EXAMPLES = ["Product Designer sênior", "Engenheiro de dados remoto", "Head de Marketing fintech", "UX Researcher pleno"];
 
 export function SearchDialog({ open, onClose, initial }: { open: boolean; onClose: () => void; initial?: Search | null }) {
   // Monta o corpo só quando aberto: o estado do formulário nasce limpo a cada abertura.
@@ -20,17 +21,18 @@ function DialogBody({ onClose, initial }: { onClose: () => void; initial?: Searc
   const [error, setError] = useState<string | null>(null);
   const [f, setF] = useState<SearchInput>(() =>
     initial
-      ? { name: initial.name, query: initial.query, location: initial.location, sources: JSON.parse(initial.sources), recency: initial.recency, freq_minutes: initial.freq_minutes }
+      ? { name: initial.name, spec: parseSpec(initial.query_spec, initial.query), location: initial.location, sources: JSON.parse(initial.sources), recency: initial.recency, freq_minutes: initial.freq_minutes }
       : blank(),
   );
 
   useEffect(() => {
     const k = (e: KeyboardEvent) => e.key === "Escape" && onClose();
     window.addEventListener("keydown", k);
-    return () => window.removeEventListener("keydown", k);
+    document.body.style.overflow = "hidden";
+    return () => { window.removeEventListener("keydown", k); document.body.style.overflow = ""; };
   }, [onClose]);
 
-  const preview = useMemo(() => buildGoogleQuery(f.query || "…", f.location, f.sources), [f]);
+  const preview = useMemo(() => buildGoogleQuery(specToQuery(f.spec) || "…", f.location, f.sources), [f]);
   const perMonth = Math.round((30 * 24 * 60) / f.freq_minutes) * 2; // 2 páginas por rodada
   const set = <K extends keyof SearchInput>(k: K, v: SearchInput[K]) => setF((p) => ({ ...p, [k]: v }));
   const toggleSource = (k: string) =>
@@ -54,7 +56,8 @@ function DialogBody({ onClose, initial }: { onClose: () => void; initial?: Searc
     });
   };
 
-  return (
+  // Portal no <body>: ancestrais com transform/animação "prendem" o position:fixed e cortam o modal.
+  return createPortal(
     <div className="fixed inset-0 z-50 grid place-items-end sm:place-items-center">
       <div className="anim-fade absolute inset-0 bg-ink/50 backdrop-blur-sm" onClick={onClose} />
       <form onSubmit={submit} className="anim-pop scroll-thin relative max-h-[94dvh] text-left w-full max-w-2xl overflow-y-auto rounded-t-[28px] border border-line bg-surface p-6 shadow-pop sm:rounded-[28px] sm:p-8">
@@ -62,21 +65,7 @@ function DialogBody({ onClose, initial }: { onClose: () => void; initial?: Searc
         <p className="text-xs font-medium tracking-wider text-accent uppercase">{initial ? "Editar busca" : "Nova busca"}</p>
         <h2 className="font-display mt-1 text-4xl">{initial ? "Ajuste o radar" : "O que você procura?"}</h2>
 
-        <label className="mt-6 block">
-          <span className="mb-2 block text-sm font-medium">Palavras-chave</span>
-          <div className="relative">
-            <SearchIcon className="absolute top-1/2 left-4 size-5 -translate-y-1/2 text-ink-3" />
-            <input autoFocus required value={f.query} onChange={(e) => set("query", e.target.value)} placeholder='ex.: "product designer" sênior'
-              className="w-full rounded-2xl border border-line bg-bg py-4 pr-4 pl-12 text-lg outline-none transition placeholder:text-ink-3 focus:border-accent focus:ring-4 focus:ring-accent/15" />
-          </div>
-          {!initial && (
-            <div className="mt-2.5 flex flex-wrap gap-1.5">
-              {EXAMPLES.map((x) => (
-                <button type="button" key={x} onClick={() => set("query", x)} className="rounded-full border border-line px-3 py-1 text-[13px] text-ink-2 transition hover:border-accent hover:text-accent">{x}</button>
-              ))}
-            </div>
-          )}
-        </label>
+        <div className="mt-6"><QueryBuilder spec={f.spec} onChange={(spec) => set("spec", spec)} /></div>
 
         <div className="mt-5 grid gap-4 sm:grid-cols-2">
           <label className="block">
@@ -135,12 +124,13 @@ function DialogBody({ onClose, initial }: { onClose: () => void; initial?: Searc
 
         <div className="mt-7 flex items-center justify-end gap-3">
           <button type="button" onClick={onClose} className="rounded-full px-5 py-3 text-sm font-medium text-ink-2 transition hover:bg-surface-2">Cancelar</button>
-          <button disabled={pending || !f.query.trim()} className="rounded-full bg-accent px-7 py-3 font-medium text-accent-ink transition hover:opacity-90 disabled:opacity-50">
+          <button disabled={pending || !hasTerms(f.spec)} className="rounded-full bg-accent px-7 py-3 font-medium text-accent-ink transition hover:opacity-90 disabled:opacity-50">
             {pending ? "Salvando…" : initial ? "Salvar alterações" : "Criar e rodar agora"}
           </button>
         </div>
       </form>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -159,5 +149,5 @@ function Segment({ label, value, onChange, options }: { label: string; value: st
 }
 
 function blank(): SearchInput {
-  return { name: "", query: "", location: "", sources: ["web"], recency: "week", freq_minutes: 360 };
+  return { name: "", spec: emptySpec(), location: "", sources: ["web"], recency: "week", freq_minutes: 360 };
 }

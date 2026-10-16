@@ -13,10 +13,11 @@ type Props = {
   counts: { total: number; unseen: number; favs: number };
   currentId: string | null;
   filter: string;
+  view?: "list" | "board";
   children: React.ReactNode; // UserButton
 };
 
-export function Sidebar({ searches, counts, currentId, filter, children }: Props) {
+export function Sidebar({ searches, counts, currentId, filter, view = "list", children }: Props) {
   const [mobile, setMobile] = useState(false);
   const [dialog, setDialog] = useState(false);
   const allActive = !currentId && filter !== "fav";
@@ -30,7 +31,7 @@ export function Sidebar({ searches, counts, currentId, filter, children }: Props
       </div>
 
       <nav className="space-y-1 px-3" onClick={() => setMobile(false)}>
-        <NavItem href="/dashboard" active={allActive} icon={<Layers className="size-4" />} label="Todas as vagas" badge={counts.unseen} />
+        <NavItem href={view === "board" ? "/dashboard?v=board" : "/dashboard"} active={allActive} icon={<Layers className="size-4" />} label="Todas as vagas" badge={counts.unseen} />
         <NavItem href="/dashboard?f=fav" active={favActive} icon={<Star className="size-4" />} label="Favoritas" count={counts.favs} />
       </nav>
 
@@ -44,7 +45,7 @@ export function Sidebar({ searches, counts, currentId, filter, children }: Props
           const active = s.id === currentId;
           const running = s.last_status === "running";
           return (
-            <Link key={s.id} href={`/dashboard?s=${s.id}`} className={`group flex items-center gap-3 rounded-xl px-3 py-2.5 transition ${active ? "bg-surface shadow-card" : "hover:bg-surface/60"}`}>
+            <Link key={s.id} href={`/dashboard?s=${s.id}${view === "board" ? "&v=board" : ""}`} className={`group flex items-center gap-3 rounded-xl px-3 py-2.5 transition ${active ? "bg-surface shadow-card" : "hover:bg-surface/60"}`}>
               <span className={`size-2.5 shrink-0 rounded-full ${running ? "pulse-dot" : ""} ${s.active ? "" : "opacity-30"}`} style={{ background: s.color, ["--dot" as string]: s.color }} />
               <span className="min-w-0 flex-1">
                 <span className={`block truncate text-sm ${active ? "font-medium" : "text-ink-2 group-hover:text-ink"}`}>{s.name}</span>

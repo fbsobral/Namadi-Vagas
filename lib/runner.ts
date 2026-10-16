@@ -1,6 +1,6 @@
 import "server-only";
 import { randomUUID } from "node:crypto";
-import { claimSearch, dueSearches, getSearchById, insertJob, logRun, markRunEnd, setKv } from "./db";
+import { claimSearch, deleteJobs, dueSearches, jobsForCleanup, getSearchById, insertJob, logRun, markRunEnd, setKv } from "./db";
 import { googleSearch, isDemoMode } from "./serp";
 import { demoJobs } from "./demo";
 import { detectSource, looksLikeJob, normalizeUrl, parseTitle } from "./parse";
@@ -16,6 +16,11 @@ export async function runSearch(searchId: string): Promise<{ added: number; tota
 
   running.add(s.id);
   const startedAt = Date.now();
+  // Reaplica o filtro às vagas antigas (menos as favoritas): remove lixo que entrou antes de o filtro ficar estrito.
+  if (!isDemoMode()) {
+    const old = await jobsForCleanup(s.id);
+    await deleteJobs(old.filter((j) => !looksLikeJob({ title: j.title, link: j.url, snippet: j.snippet })).map((j) => j.id));
+  }
   let added = 0;
   let total = 0;
   let error: string | null = null;

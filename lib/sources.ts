@@ -55,6 +55,6 @@ export function buildGoogleQuery(query: string, location: string, sourceKeys: st
   const useWeb = sourceKeys.includes("web") || keys.length === 0;
   const sites = useWeb ? [] : keys.flatMap((k) => SOURCES.find((s) => s.key === k)?.sites ?? []);
   const siteExpr = sites.length ? ` (${sites.map((s) => `site:${s}`).join(" OR ")})` : "";
-  const intent = useWeb ? " (vaga OR job OR hiring OR contratando OR careers)" : "";
+  const intent = useWeb ? " (inurl:vaga OR inurl:vagas OR inurl:job OR inurl:jobs OR inurl:careers OR inurl:carreiras) -curso -faculdade -salário" : "";
   return `${query}${location ? ` ${location}` : ""}${intent}${siteExpr}`.replace(/\s+/g, " ").trim();
 }

@@ -3,6 +3,7 @@ export type Search = {
   user_id: string;
   name: string;
   query: string;
+  query_spec: string | null; // JSON de QuerySpec (grupos E/OU)
   location: string;
   sources: string; // JSON array de chaves de lib/sources
   recency: "day" | "week" | "month" | "any";
@@ -34,6 +35,8 @@ export type Job = {
   favorite: number;
   favorited_at: number | null;
   seen: number;
+  stage: string | null; // etapa do kanban; null = fora do quadro
+  stage_pos: number;
   contacts_status: "idle" | "pending" | "done" | "error";
   contacts_error: string | null;
   search_name?: string;
