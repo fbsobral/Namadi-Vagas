@@ -87,7 +87,7 @@ ALTER TABLE runs ADD COLUMN IF NOT EXISTS raw_count INTEGER NOT NULL DEFAULT 0;
 CREATE INDEX IF NOT EXISTS idx_runs_search ON runs(search_id, started_at DESC);
 `;
 
-const g = globalThis as unknown as { __vagasPool?: Pool; __vagasReady?: Promise<void> };
+const g = globalThis as unknown as { __vagasPool?: Pool; __vagasReady?: Promise<void>; __vagasSchema?: string };
 
 function pool(): Pool {
   if (!g.__vagasPool) {
@@ -103,6 +103,8 @@ function pool(): Pool {
 }
 
 async function ready() {
+  // Se o schema mudou (hot reload em dev), roda as migrações de novo.
+  if (g.__vagasSchema !== SCHEMA) { g.__vagasSchema = SCHEMA; g.__vagasReady = undefined; }
   if (!g.__vagasReady) {
     g.__vagasReady = (async () => {
       const p = pool();
