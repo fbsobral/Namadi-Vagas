@@ -1,6 +1,11 @@
 node_modules
 .next
 .git
+.claude
 .env*
 !.env.example
 data
+*.md
+!README.md
+Dockerfile
+.dockerignore
