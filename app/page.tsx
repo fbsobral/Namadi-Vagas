@@ -42,8 +42,8 @@ export default async function Home() {
 
         <section id="como" className="mx-auto grid max-w-6xl gap-4 px-5 py-24 md:grid-cols-3">
           {[
-            { i: RadarIcon, t: "Buscas que são suas", d: "Palavras-chave, cidade, fontes (LinkedIn, Gupy, Greenhouse…) e janela de tempo. Salve quantas quiser, cada uma com sua cor." },
-            { i: Bot, t: "Um robô na sua frequência", d: "De 30 minutos a uma semana. O robô consulta o Google, filtra o ruído e te mostra só as vagas inéditas." },
+            { i: RadarIcon, t: "Buscas que são suas", d: "Palavras-chave, cidade, fontes (LinkedIn, Gupy e Google aberto), E/OU entre palavras e janela de tempo. Salve quantas quiser, cada uma com sua cor." },
+            { i: Bot, t: "Um robô na sua frequência", d: "De 30 minutos a uma semana. O robô lê LinkedIn, Gupy e o Google, filtra o ruído e te mostra só as vagas inéditas." },
             { i: Users, t: "Gente, não só vagas", d: "Favoritou? Em segundos você tem recrutadores, lideranças e pessoas do time no LinkedIn, com mensagem pronta para quebrar o gelo." },
           ].map(({ i: Icon, t, d }, n) => (
             <article key={t} className="rounded-3xl border border-line bg-surface p-7 shadow-card transition hover:-translate-y-1">
@@ -56,9 +56,34 @@ export default async function Home() {
             </article>
           ))}
         </section>
+
+        <section className="relative isolate overflow-hidden bg-accent text-accent-ink">
+          <svg aria-hidden className="pointer-events-none absolute -top-40 -right-40 -z-10 size-[620px] opacity-60" viewBox="0 0 600 600">
+            {[280, 210, 140, 70].map((r) => <circle key={r} cx="300" cy="300" r={r} fill="none" stroke="currentColor" strokeOpacity=".22" />)}
+            <g style={{ transformOrigin: "300px 300px", animation: "spin 9s linear infinite" }}>
+              <path d="M300 300 L300 20 A280 280 0 0 1 560 190 Z" fill="currentColor" fillOpacity=".14" />
+            </g>
+          </svg>
+          <svg aria-hidden className="pointer-events-none absolute -bottom-52 -left-40 -z-10 size-[460px] opacity-40" viewBox="0 0 600 600">
+            {[280, 200, 120].map((r) => <circle key={r} cx="300" cy="300" r={r} fill="none" stroke="currentColor" strokeOpacity=".22" />)}
+          </svg>
+
+          <div className="mx-auto max-w-4xl px-5 py-20 text-center sm:py-28">
+            <h2 className="font-display text-[clamp(2.6rem,7vw,5.5rem)] leading-[0.98]">
+              Sua próxima vaga já foi publicada. <em className="opacity-80">Falta o robô te avisar.</em>
+            </h2>
+            <p className="mx-auto mt-6 max-w-xl text-lg opacity-85">Crie sua primeira busca em um minuto. Ela roda sozinha, no ritmo que você escolher, e cada favorita vira um passo do seu kanban.</p>
+            <div className="mt-10 flex flex-wrap items-center justify-center gap-3">
+              <Link href={cta.href} className="group inline-flex items-center gap-2 rounded-full bg-ink px-8 py-4 font-medium text-bg shadow-pop transition hover:-translate-y-0.5">
+                {cta.label} <ArrowUpRight className="size-4 transition group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
+              </Link>
+              {!userId && <Link href="/sign-in" className="rounded-full border border-current/40 px-7 py-4 font-medium transition hover:bg-black/10">Já tenho conta</Link>}
+            </div>
+          </div>
+        </section>
       </main>
 
-      <footer className="mx-auto max-w-6xl px-5 pb-12 text-sm text-ink-3">© {new Date().getFullYear()} Namadi Vagas</footer>
+      <footer className="mx-auto max-w-6xl px-5 py-10 text-sm text-ink-3">© {new Date().getFullYear()} Namadi Vagas</footer>
     </div>
   );
 }
