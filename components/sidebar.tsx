@@ -1,0 +1,98 @@
+"use client";
+
+import { useState } from "react";
+import Link from "next/link";
+import { Menu, Plus, Star, Layers, X } from "lucide-react";
+import { Logo } from "./logo";
+import { SearchDialog } from "./search-dialog";
+import { freqLabel } from "@/lib/sources";
+import type { Search } from "@/lib/types";
+
+type Props = {
+  searches: Search[];
+  counts: { total: number; unseen: number; favs: number };
+  currentId: string | null;
+  filter: string;
+  children: React.ReactNode; // UserButton
+};
+
+export function Sidebar({ searches, counts, currentId, filter, children }: Props) {
+  const [mobile, setMobile] = useState(false);
+  const [dialog, setDialog] = useState(false);
+  const allActive = !currentId && filter !== "fav";
+  const favActive = !currentId && filter === "fav";
+
+  const nav = (
+    <div className="flex h-full flex-col">
+      <div className="flex items-center justify-between px-5 pt-6 pb-5">
+        <Link href="/dashboard"><Logo /></Link>
+        <button className="lg:hidden" onClick={() => setMobile(false)} aria-label="Fechar menu"><X className="size-5" /></button>
+      </div>
+
+      <nav className="space-y-1 px-3" onClick={() => setMobile(false)}>
+        <NavItem href="/dashboard" active={allActive} icon={<Layers className="size-4" />} label="Todas as vagas" badge={counts.unseen} />
+        <NavItem href="/dashboard?f=fav" active={favActive} icon={<Star className="size-4" />} label="Favoritas" count={counts.favs} />
+      </nav>
+
+      <div className="mt-7 flex items-center justify-between px-5">
+        <p className="text-[11px] font-medium tracking-wider text-ink-3 uppercase">Minhas buscas</p>
+        <button onClick={() => { setDialog(true); setMobile(false); }} className="grid size-7 place-items-center rounded-full bg-ink text-bg transition hover:bg-accent hover:text-accent-ink" aria-label="Nova busca"><Plus className="size-4" /></button>
+      </div>
+
+      <div className="scroll-thin mt-2 flex-1 space-y-0.5 overflow-y-auto px-3 pb-4" onClick={() => setMobile(false)}>
+        {searches.map((s) => {
+          const active = s.id === currentId;
+          const running = s.last_status === "running";
+          return (
+            <Link key={s.id} href={`/dashboard?s=${s.id}`} className={`group flex items-center gap-3 rounded-xl px-3 py-2.5 transition ${active ? "bg-surface shadow-card" : "hover:bg-surface/60"}`}>
+              <span className={`size-2.5 shrink-0 rounded-full ${running ? "pulse-dot" : ""} ${s.active ? "" : "opacity-30"}`} style={{ background: s.color, ["--dot" as string]: s.color }} />
+              <span className="min-w-0 flex-1">
+                <span className={`block truncate text-sm ${active ? "font-medium" : "text-ink-2 group-hover:text-ink"}`}>{s.name}</span>
+                <span className="block truncate text-xs text-ink-3">{!s.active ? "pausada" : running ? "buscando agora…" : freqLabel(s.freq_minutes)}</span>
+              </span>
+              {(s.unseen ?? 0) > 0 && <span className="rounded-full bg-accent px-1.5 py-0.5 text-[11px] leading-none font-semibold text-accent-ink">{s.unseen}</span>}
+            </Link>
+          );
+        })}
+        {searches.length === 0 && (
+          <button onClick={() => setDialog(true)} className="w-full rounded-2xl border border-dashed border-line p-4 text-left text-sm text-ink-3 transition hover:border-accent hover:text-accent">
+            Crie sua primeira busca →
+          </button>
+        )}
+      </div>
+
+      <div className="flex items-center gap-3 border-t border-line px-5 py-4">{children}</div>
+    </div>
+  );
+
+  return (
+    <>
+      <div className="sticky top-0 z-30 flex items-center justify-between border-b border-line bg-bg/85 px-4 py-3 backdrop-blur lg:hidden">
+        <Logo size={24} />
+        <button onClick={() => setMobile(true)} aria-label="Abrir menu" className="grid size-9 place-items-center rounded-full border border-line bg-surface"><Menu className="size-5" /></button>
+      </div>
+
+      <aside className="sticky top-0 hidden h-dvh w-[290px] shrink-0 border-r border-line bg-surface-2/50 lg:block">{nav}</aside>
+
+      {mobile && (
+        <div className="fixed inset-0 z-40 lg:hidden">
+          <div className="anim-fade absolute inset-0 bg-ink/50" onClick={() => setMobile(false)} />
+          <aside className="anim-slide absolute inset-y-0 left-0 w-[300px] max-w-[85vw] bg-bg" style={{ animationName: "fade" }}>{nav}</aside>
+        </div>
+      )}
+
+      <SearchDialog open={dialog} onClose={() => setDialog(false)} />
+    </>
+  );
+}
+
+function NavItem({ href, active, icon, label, count, badge }: { href: string; active: boolean; icon: React.ReactNode; label: string; count?: number; badge?: number }) {
+  return (
+    <Link href={href} className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition ${active ? "bg-surface font-medium shadow-card" : "text-ink-2 hover:bg-surface/60 hover:text-ink"}`}>
+      <span className={active ? "text-accent" : ""}>{icon}</span>
+      <span className="flex-1">{label}</span>
+      {count !== undefined && count > 0 && <span className="font-mono text-xs text-ink-3">{count}</span>}
+      {!!badge && <span className="rounded-full bg-accent px-1.5 py-0.5 text-[11px] leading-none font-semibold text-accent-ink">{badge}</span>}
+    </Link>
+  );
+}

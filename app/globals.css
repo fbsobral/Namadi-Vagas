@@ -1,0 +1,107 @@
+@import "tailwindcss";
+
+:root {
+  --bg: #f6f3ec;
+  --surface: #ffffff;
+  --surface-2: #efebe2;
+  --ink: #17140f;
+  --ink-2: #5a544a;
+  --ink-3: #8e8779;
+  --line: #e5dfd1;
+  --accent: #e8501f;
+  --accent-ink: #ffffff;
+  --accent-soft: #fde6db;
+  --ok: #1f8a5b;
+  --ok-soft: #dcf2e7;
+  --shadow: 0 1px 0 rgb(23 20 15 / 0.04), 0 8px 24px -12px rgb(23 20 15 / 0.12);
+  --shadow-lg: 0 24px 60px -20px rgb(23 20 15 / 0.35);
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0f0e0c;
+    --surface: #181613;
+    --surface-2: #211e19;
+    --ink: #f4efe6;
+    --ink-2: #b3ab9d;
+    --ink-3: #7d7669;
+    --line: #2b2722;
+    --accent: #ff6a3a;
+    --accent-ink: #1a0d07;
+    --accent-soft: #3a1f13;
+    --ok: #4cc58a;
+    --ok-soft: #14301f;
+    --shadow: 0 1px 0 rgb(255 255 255 / 0.03), 0 8px 24px -12px rgb(0 0 0 / 0.6);
+    --shadow-lg: 0 24px 60px -20px rgb(0 0 0 / 0.8);
+    color-scheme: dark;
+  }
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+  --color-line: var(--line);
+  --color-accent: var(--accent);
+  --color-accent-ink: var(--accent-ink);
+  --color-accent-soft: var(--accent-soft);
+  --color-ok: var(--ok);
+  --color-ok-soft: var(--ok-soft);
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+  --font-serif: var(--font-serif), Georgia, serif;
+  --shadow-card: var(--shadow);
+  --shadow-pop: var(--shadow-lg);
+}
+
+html { background: var(--bg); }
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+::selection { background: var(--accent); color: var(--accent-ink); }
+
+/* grão sutil no fundo: dá textura de papel */
+body::before {
+  content: "";
+  position: fixed; inset: 0; pointer-events: none; z-index: 0; opacity: 0.35; mix-blend-mode: multiply;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.5  0 0 0 0 0.45  0 0 0 0 0.4  0 0 0 .09 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+}
+@media (prefers-color-scheme: dark) { body::before { mix-blend-mode: screen; opacity: 0.2; } }
+
+.font-display { font-family: var(--font-serif); font-weight: 400; letter-spacing: -0.02em; }
+
+@keyframes rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+@keyframes pop { from { opacity: 0; transform: translateY(8px) scale(.98); } to { opacity: 1; transform: none; } }
+@keyframes slide-in { from { transform: translateX(32px); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+@keyframes ping-soft { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--dot, var(--accent)) 55%, transparent); } 100% { box-shadow: 0 0 0 8px transparent; } }
+@keyframes star-pop { 0% { transform: scale(1); } 40% { transform: scale(1.35) rotate(-12deg); } 100% { transform: scale(1); } }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.anim-rise { animation: rise .5s cubic-bezier(.2,.7,.2,1) both; }
+.anim-pop { animation: pop .28s cubic-bezier(.2,.8,.2,1) both; }
+.anim-slide { animation: slide-in .35s cubic-bezier(.2,.8,.2,1) both; }
+.anim-fade { animation: fade .25s ease both; }
+.anim-star { animation: star-pop .4s cubic-bezier(.3,1.6,.5,1); }
+.pulse-dot { animation: ping-soft 1.6s ease-out infinite; }
+.spin { animation: spin .8s linear infinite; }
+.skeleton {
+  background: linear-gradient(100deg, var(--surface-2) 30%, color-mix(in srgb, var(--surface-2) 60%, var(--surface)) 50%, var(--surface-2) 70%);
+  background-size: 200% 100%; animation: shimmer 1.6s linear infinite;
+}
+
+.scroll-thin { scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
+.line-clamp-2 { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; }
+}
