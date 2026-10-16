@@ -4,15 +4,16 @@ import { currentUser } from "@clerk/nextjs/server";
 import { getUserId } from "@/lib/auth";
 import { UserButton } from "@clerk/nextjs";
 import { AlertTriangle, Radar as RadarIcon, Star } from "lucide-react";
-import { getJob, jobCounts, listContacts, listJobs, listSearches, type JobFilter } from "@/lib/db";
+import { getJob, getKv, jobCounts, listContacts, listJobs, listRuns, listSearches, type JobFilter } from "@/lib/db";
 import { isDemoMode } from "@/lib/serp";
 import { buildGoogleQuery, freqLabel } from "@/lib/sources";
-import { timeAgo } from "@/lib/format";
+import { isFresh, timeAgo } from "@/lib/format";
 import { Sidebar } from "@/components/sidebar";
 import { SearchToolbar } from "@/components/search-toolbar";
 import { JobCard } from "@/components/job-card";
 import { JobDrawer } from "@/components/job-drawer";
 import { AutoRefresh } from "@/components/auto-refresh";
+import { RobotStatus, RunHistory } from "@/components/robot-status";
 import { NewSearchButton } from "@/components/new-search-button";
 
 export const dynamic = "force-dynamic";
@@ -27,6 +28,7 @@ export default async function Dashboard({ searchParams }: PageProps<"/dashboard"
   const current = searches.find((s) => s.id === one("s")) ?? null;
   const filter: JobFilter = one("f") === "new" ? "new" : one("f") === "fav" ? "fav" : "all";
   const jobs = await listJobs(userId, { searchId: current?.id, filter });
+  const [beat, runs] = await Promise.all([getKv("scheduler_heartbeat"), current ? listRuns(current.id) : Promise.resolve([])]);
   const jobId = one("job");
   const drawerJob = jobId ? await getJob(userId, jobId) : null;
   const contacts = drawerJob ? await listContacts(drawerJob.id) : [];
@@ -65,6 +67,8 @@ export default async function Dashboard({ searchParams }: PageProps<"/dashboard"
             </div>
           )}
 
+          <div className="mb-5 flex justify-end"><RobotStatus lastBeat={beat?.updated_at ?? null} online={isFresh(beat?.updated_at, 3 * 60_000)} /></div>
+
           <header className="anim-rise">
             <div className="flex items-center gap-2 text-sm text-ink-3">
               {current && <span className="size-2.5 rounded-full" style={{ background: current.color }} />}
@@ -79,6 +83,7 @@ export default async function Dashboard({ searchParams }: PageProps<"/dashboard"
                 </p>
                 {current.last_status === "error" && <p className="mt-2 inline-flex items-center gap-2 rounded-lg bg-accent-soft px-3 py-1.5 text-sm text-accent"><AlertTriangle className="size-4" /> {current.last_error}</p>}
                 <div className="mt-5"><SearchToolbar search={current} unseen={jobs.filter((j) => !j.seen).length} /></div>
+                <RunHistory runs={runs} />
               </>
             ) : (
               <p className="mt-3 text-ink-2">{counts.total} vagas · {counts.unseen} novas · {counts.favs} favoritas</p>

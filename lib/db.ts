@@ -61,6 +61,14 @@ CREATE TABLE IF NOT EXISTS contacts (
   UNIQUE(job_id, url)
 );
 
+ALTER TABLE searches ADD COLUMN IF NOT EXISTS locked_at BIGINT;
+
+CREATE TABLE IF NOT EXISTS kv (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL,
+  updated_at BIGINT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS runs (
   id BIGSERIAL PRIMARY KEY,
   search_id TEXT NOT NULL REFERENCES searches(id) ON DELETE CASCADE,
@@ -70,6 +78,7 @@ CREATE TABLE IF NOT EXISTS runs (
   total_count INTEGER NOT NULL DEFAULT 0,
   error TEXT
 );
+CREATE INDEX IF NOT EXISTS idx_runs_search ON runs(search_id, started_at DESC);
 `;
 
 const g = globalThis as unknown as { __vagasPool?: Pool; __vagasReady?: Promise<void> };
@@ -92,8 +101,7 @@ async function ready() {
     g.__vagasReady = (async () => {
       const p = pool();
       await p.query(SCHEMA);
-      // Execuções que ficaram "em andamento" por causa de um restart nunca terminariam sozinhas.
-      await p.query("UPDATE searches SET last_status='idle' WHERE last_status='running'");
+      // Travas de busca expiram sozinhas (STALE_LOCK_MS); só os contatos "pendentes" órfãos precisam de reset.
       await p.query("UPDATE jobs SET contacts_status='error', contacts_error='Interrompido' WHERE contacts_status='pending'");
     })().catch((e) => {
       g.__vagasReady = undefined;
@@ -164,18 +172,45 @@ export const setSearchActive = (userId: string, id: string, active: boolean) =>
 export const deleteSearch = (userId: string, id: string) =>
   run("DELETE FROM searches WHERE id=? AND user_id=?", id, userId);
 
+export const STALE_LOCK_MS = 15 * 60_000;
+
 export const dueSearches = (now: number) =>
-  all<Search>("SELECT * FROM searches WHERE active=1 AND last_status != 'running' AND next_run_at IS NOT NULL AND next_run_at <= ?", now);
+  all<Search>(
+    `SELECT * FROM searches WHERE active=1 AND next_run_at IS NOT NULL AND next_run_at <= ?
+       AND (last_status != 'running' OR locked_at IS NULL OR locked_at < ?)`,
+    now, now - STALE_LOCK_MS,
+  );
 
-export const markRunStart = (id: string) => run("UPDATE searches SET last_status='running', last_error=NULL WHERE id=?", id);
+/** Trava atômica no banco: só uma instância ganha. Trava velha (processo morreu) é reassumida. */
+export async function claimSearch(id: string) {
+  const now = Date.now();
+  const r = await run(
+    `UPDATE searches SET last_status='running', locked_at=?, last_error=NULL
+     WHERE id=? AND (last_status != 'running' OR locked_at IS NULL OR locked_at < ?)`,
+    now, id, now - STALE_LOCK_MS,
+  );
+  return (r.rowCount ?? 0) > 0;
+}
 
+/** Em caso de erro tenta de novo logo (no máx. 30 min); em caso de sucesso espera a frequência escolhida. */
 export function markRunEnd(id: string, error: string | null, freqMinutes: number) {
   const now = Date.now();
+  const wait = error ? Math.min(freqMinutes, 30) : freqMinutes;
   return run(
-    "UPDATE searches SET last_status=?, last_error=?, last_run_at=?, next_run_at=? WHERE id=?",
-    error ? "error" : "ok", error, now, now + freqMinutes * 60000, id,
+    "UPDATE searches SET last_status=?, last_error=?, last_run_at=?, next_run_at=?, locked_at=NULL WHERE id=?",
+    error ? "error" : "ok", error, now, now + wait * 60000, id,
   );
 }
+
+export type RunRow = { id: number; started_at: number; finished_at: number | null; new_count: number; total_count: number; error: string | null };
+export const listRuns = (searchId: string, limit = 8) =>
+  all<RunRow>("SELECT id, started_at, finished_at, new_count, total_count, error FROM runs WHERE search_id=? ORDER BY started_at DESC LIMIT " + Number(limit), searchId);
+
+/* ---------- sinal de vida ---------- */
+
+export const setKv = (key: string, value: string) =>
+  run("INSERT INTO kv (key,value,updated_at) VALUES (?,?,?) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value, updated_at=EXCLUDED.updated_at", key, value, Date.now());
+export const getKv = (key: string) => get<{ value: string; updated_at: number }>("SELECT value, updated_at FROM kv WHERE key=?", key);
 
 export const logRun = (searchId: string, startedAt: number, newCount: number, total: number, error: string | null) =>
   run("INSERT INTO runs (search_id,started_at,finished_at,new_count,total_count,error) VALUES (?,?,?,?,?,?)",
@@ -239,6 +274,16 @@ export const markAllSeen = (userId: string, searchId: string | null) =>
 
 export const setContactsStatus = (id: string, status: Job["contacts_status"], error: string | null = null) =>
   run("UPDATE jobs SET contacts_status=?, contacts_error=? WHERE id=?", status, error, id);
+
+/** Reserva a busca de contatos (idempotência): só quem muda o status para "pending" executa. */
+export async function claimContacts(userId: string, id: string, force = false) {
+  const r = await run(
+    `UPDATE jobs SET contacts_status='pending', contacts_error=NULL
+     WHERE id=? AND user_id=? AND contacts_status != 'pending' ${force ? "" : "AND contacts_status != 'done'"}`,
+    id, userId,
+  );
+  return (r.rowCount ?? 0) > 0;
+}
 
 /* ---------- contacts ---------- */
 

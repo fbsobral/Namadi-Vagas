@@ -8,6 +8,7 @@ Radar de vagas: buscas personalizadas salvas por usuário, um robô que consulta
 
 - **Buscas**: nome, palavras-chave, local, fontes (Google aberto, LinkedIn, Gupy, Greenhouse, Lever…), janela de tempo e **frequência** (30 min → semanal, ou minutos customizados).
 - **Robô**: `instrumentation.ts` sobe um agendador interno (tick de 1 min) que roda as buscas vencidas. Deduplica por URL e só grava vagas novas. Também há `GET /api/cron` (com `Authorization: Bearer $CRON_SECRET`) para disparo externo.
+- **Confiabilidade**: a trava de cada busca fica no banco (atômica, expira em 15 min se o processo morrer), então duas réplicas não duplicam rodadas. Se uma busca falha, tenta de novo em até 30 min. O agendador grava um sinal de vida a cada minuto; o painel mostra "Robô online/parado" e o histórico das últimas rodadas de cada busca.
 - **Favoritou → contatos**: `lib/contacts.ts` faz 3 consultas `site:linkedin.com/in "<empresa>" …` (recrutadores, lideranças, time), filtra homônimos pela empresa, classifica e salva. A UI mostra cada pessoa com link e mensagem sugerida.
 - **Robô próprio** (`lib/serp.ts`): abre o Google num Chromium headless (Playwright), lê os resultados e resolve os links `/goto` para a URL real. Se o Google pedir CAPTCHA, ele entra em pausa por 30 min e o robô cai para DuckDuckGo e depois Bing (`SEARCH_ENGINES`).
 - `DEMO_MODE=1` mostra dados fictícios (sinalizado na UI).
@@ -36,4 +37,4 @@ Precisa de um Postgres acessível em `DATABASE_URL`. As tabelas são criadas aut
    - `NEXT_PUBLIC_CLERK_SIGN_IN_URL=/sign-in`, `NEXT_PUBLIC_CLERK_SIGN_UP_URL=/sign-up`
    - `NEXT_PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL=/dashboard`, `NEXT_PUBLIC_CLERK_SIGN_UP_FALLBACK_REDIRECT_URL=/dashboard`
 4. **Domínio**: aponte o DNS para a VPS e configure o domínio no app (o Coolify emite o HTTPS). No Clerk, use as chaves de **produção** e adicione o domínio.
-5. **Deploy**. Como o container fica sempre ligado, o agendador interno já cuida do robô — não precisa de cron externo. Mantenha **1 réplica** (com várias, as buscas rodariam em duplicidade).
+5. **Deploy**. Como o container fica sempre ligado, o agendador interno já cuida do robô — não precisa de cron externo. Pode manter 1 réplica (recomendado: o Chromium consome memória); com mais, a trava no banco evita rodadas duplicadas.

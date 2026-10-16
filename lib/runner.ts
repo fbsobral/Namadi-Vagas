@@ -1,6 +1,6 @@
 import "server-only";
 import { randomUUID } from "node:crypto";
-import { dueSearches, getSearchById, insertJob, logRun, markRunEnd, markRunStart } from "./db";
+import { claimSearch, dueSearches, getSearchById, insertJob, logRun, markRunEnd, setKv } from "./db";
 import { googleSearch, isDemoMode } from "./serp";
 import { demoJobs } from "./demo";
 import { detectSource, looksLikeJob, normalizeUrl, parseTitle } from "./parse";
@@ -12,10 +12,9 @@ const running = new Set<string>();
 export async function runSearch(searchId: string): Promise<{ added: number; total: number; error?: string }> {
   const s = await getSearchById(searchId);
   if (!s) return { added: 0, total: 0, error: "Busca não encontrada" };
-  if (running.has(s.id)) return { added: 0, total: 0, error: "Já em execução" };
+  if (running.has(s.id) || !(await claimSearch(s.id))) return { added: 0, total: 0, error: "Já em execução" };
 
   running.add(s.id);
-  await markRunStart(s.id);
   const startedAt = Date.now();
   let added = 0;
   let total = 0;
@@ -74,3 +73,6 @@ export async function runDue() {
   }
   return out;
 }
+
+/** Sinal de vida: o painel avisa se o agendador parar de bater. */
+export const beat = () => setKv("scheduler_heartbeat", String(process.pid));

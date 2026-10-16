@@ -44,7 +44,6 @@ function parseProfile(r: SerpResult, company: string, titleWords: string[]) {
 export async function findContacts(jobId: string) {
   const job = await getJobById(jobId);
   if (!job) return;
-  await setContactsStatus(jobId, "pending");
 
   try {
     const company = job.company.replace(/["]/g, "");

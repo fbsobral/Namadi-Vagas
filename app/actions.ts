@@ -80,18 +80,15 @@ export async function toggleFavorite(jobId: string, fav: boolean) {
   const job = await q.getJob(userId, jobId);
   if (!job) throw new Error("Vaga não encontrada");
   await q.setFavorite(userId, jobId, fav);
-  if (fav && job.contacts_status !== "done") {
-    await q.setContactsStatus(jobId, "pending");
-    after(() => findContacts(jobId)); // robô do LinkedIn em segundo plano
-  }
+  // claim atômico: favoritar duas vezes (ou em duas abas) nunca dispara duas buscas
+  if (fav && (await q.claimContacts(userId, jobId))) after(() => findContacts(jobId)); // robô do LinkedIn em segundo plano
   refresh();
 }
 
 export async function retryContacts(jobId: string) {
   const userId = await uid();
   if (!(await q.getJob(userId, jobId))) throw new Error("Vaga não encontrada");
-  await q.setContactsStatus(jobId, "pending");
-  after(() => findContacts(jobId));
+  if (await q.claimContacts(userId, jobId, true)) after(() => findContacts(jobId));
   refresh();
 }
 
