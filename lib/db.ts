@@ -1,4 +1,5 @@
 import "server-only";
+import { randomBytes, randomUUID } from "node:crypto";
 import { Pool, types } from "pg";
 import type { Contact, Job, Search } from "./types";
 
@@ -59,6 +60,36 @@ ALTER TABLE jobs ADD COLUMN IF NOT EXISTS filter_keep INTEGER NOT NULL DEFAULT 0
 ALTER TABLE jobs ADD COLUMN IF NOT EXISTS stage TEXT;
 ALTER TABLE jobs ADD COLUMN IF NOT EXISTS stage_pos INTEGER NOT NULL DEFAULT 0;
 UPDATE jobs SET stage='todo' WHERE favorite=1 AND stage IS NULL;
+
+CREATE TABLE IF NOT EXISTS search_members (
+  id TEXT PRIMARY KEY,
+  search_id TEXT NOT NULL REFERENCES searches(id) ON DELETE CASCADE,
+  email TEXT NOT NULL,
+  user_id TEXT,
+  status TEXT NOT NULL DEFAULT 'pending',
+  invited_by TEXT NOT NULL,
+  inviter_name TEXT,
+  member_name TEXT,
+  token TEXT NOT NULL,
+  created_at BIGINT NOT NULL,
+  accepted_at BIGINT,
+  UNIQUE(search_id, email)
+);
+CREATE INDEX IF NOT EXISTS idx_members_email ON search_members(email);
+CREATE INDEX IF NOT EXISTS idx_members_user ON search_members(user_id);
+
+-- estado PESSOAL de cada vaga (favorito, etapa do kanban, visto): cada pessoa tem o seu
+CREATE TABLE IF NOT EXISTS job_user (
+  job_id TEXT NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL,
+  favorite INTEGER NOT NULL DEFAULT 0,
+  favorited_at BIGINT,
+  seen INTEGER NOT NULL DEFAULT 0,
+  stage TEXT,
+  stage_pos INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (job_id, user_id)
+);
+CREATE INDEX IF NOT EXISTS idx_job_user_user ON job_user(user_id);
 
 CREATE TABLE IF NOT EXISTS contacts (
   id TEXT PRIMARY KEY,
@@ -123,6 +154,13 @@ async function ready() {
     g.__vagasReady = (async () => {
       const p = pool();
       await p.query(SCHEMA);
+      // Migração única: favorito/etapa/visto saem da vaga e passam a ser por pessoa (o dono herda o que já tinha).
+      if (!(await p.query("SELECT 1 FROM kv WHERE key='migrated_job_user'")).rowCount) {
+        await p.query(`INSERT INTO job_user (job_id,user_id,favorite,favorited_at,seen,stage,stage_pos)
+          SELECT id,user_id,favorite,favorited_at,seen,stage,stage_pos FROM jobs WHERE favorite=1 OR seen=1 OR stage IS NOT NULL
+          ON CONFLICT DO NOTHING`);
+        await p.query("INSERT INTO kv (key,value,updated_at) VALUES ('migrated_job_user','1',$1) ON CONFLICT (key) DO NOTHING", [Date.now()]);
+      }
       // Travas de busca expiram sozinhas (STALE_LOCK_MS); só os contatos "pendentes" órfãos precisam de reset.
       await p.query("UPDATE jobs SET contacts_status='error', contacts_error='Interrompido' WHERE contacts_status='pending'");
     })().catch((e) => {
@@ -152,14 +190,19 @@ async function run(q: string, ...p: P[]) {
 
 /* ---------- searches ---------- */
 
+/** Acesso a uma busca: é a dona, ou foi convidada e aceitou. Usa 2 parâmetros: (userId, userId). */
+const ACCESS = `(s.user_id = ? OR EXISTS (SELECT 1 FROM search_members m WHERE m.search_id = s.id AND m.user_id = ? AND m.status = 'accepted'))`;
+
 export const listSearches = (userId: string) =>
   all<Search>(
-    `SELECT s.*,
+    `SELECT s.*, (s.user_id = ?) AS is_owner,
+       (SELECT m.inviter_name FROM search_members m WHERE m.search_id = s.id AND m.user_id = ? AND m.status = 'accepted') AS owner_name,
+       (SELECT COUNT(*) FROM search_members m WHERE m.search_id = s.id AND m.status = 'accepted') AS shared_count,
        (SELECT COUNT(*) FROM jobs j WHERE j.search_id = s.id AND j.filtered = 0) AS total,
-       (SELECT COUNT(*) FROM jobs j WHERE j.search_id = s.id AND j.filtered = 0 AND j.seen = 0) AS unseen,
-       (SELECT COUNT(*) FROM jobs j WHERE j.search_id = s.id AND j.filtered = 0 AND j.favorite = 1) AS favs
-     FROM searches s WHERE s.user_id = ? ORDER BY s.created_at ASC`,
-    userId,
+       (SELECT COUNT(*) FROM jobs j LEFT JOIN job_user u ON u.job_id = j.id AND u.user_id = ? WHERE j.search_id = s.id AND j.filtered = 0 AND COALESCE(u.seen, 0) = 0) AS unseen,
+       (SELECT COUNT(*) FROM jobs j JOIN job_user u ON u.job_id = j.id AND u.user_id = ? WHERE j.search_id = s.id AND j.filtered = 0 AND u.favorite = 1) AS favs
+     FROM searches s WHERE ${ACCESS} ORDER BY (s.user_id = ?) DESC, s.created_at ASC`,
+    userId, userId, userId, userId, userId, userId, userId,
   );
 
 export const getSearch = (userId: string, id: string) =>
@@ -281,38 +324,35 @@ export const countUnnotified = async (searchId: string, since: number) =>
 
 export type JobFilter = "all" | "new" | "fav" | "board" | "filtered";
 
+const JOB_COLS = `j.*, s.name AS search_name, s.color AS search_color, (s.user_id = ?) AS is_owner,
+       COALESCE(u.favorite, 0) AS favorite, u.favorited_at AS favorited_at, COALESCE(u.seen, 0) AS seen, u.stage AS stage, COALESCE(u.stage_pos, 0) AS stage_pos`;
+const JOB_FROM = `FROM jobs j JOIN searches s ON s.id = j.search_id LEFT JOIN job_user u ON u.job_id = j.id AND u.user_id = ?`;
+
 export function listJobs(userId: string, opts: { searchId?: string | null; filter: JobFilter; limit?: number }) {
-  const where = ["j.user_id = ?"];
-  const params: P[] = [userId];
+  const where = [ACCESS];
+  const params: P[] = [userId, userId, userId, userId]; // is_owner, join, acesso(2)
   if (opts.searchId) { where.push("j.search_id = ?"); params.push(opts.searchId); }
   where.push(opts.filter === "filtered" ? "j.filtered = 1" : "j.filtered = 0");
-  if (opts.filter === "new") where.push("j.seen = 0");
-  if (opts.filter === "fav") where.push("j.favorite = 1");
-  if (opts.filter === "board") where.push("j.stage IS NOT NULL");
-  const order = opts.filter === "fav" ? "j.favorited_at DESC" : opts.filter === "board" ? "j.stage_pos ASC, j.favorited_at DESC" : "j.found_at DESC, j.id DESC";
-  return all<Job>(
-    `SELECT j.*, s.name AS search_name, s.color AS search_color FROM jobs j
-     JOIN searches s ON s.id = j.search_id WHERE ${where.join(" AND ")} ORDER BY ${order} LIMIT ${Number(opts.limit ?? 120)}`,
-    ...params,
-  );
+  if (opts.filter === "new") where.push("COALESCE(u.seen, 0) = 0");
+  if (opts.filter === "fav") where.push("u.favorite = 1");
+  if (opts.filter === "board") where.push("u.stage IS NOT NULL");
+  const order = opts.filter === "fav" ? "u.favorited_at DESC" : opts.filter === "board" ? "u.stage_pos ASC, u.favorited_at DESC" : "j.found_at DESC, j.id DESC";
+  return all<Job>(`SELECT ${JOB_COLS} ${JOB_FROM} WHERE ${where.join(" AND ")} ORDER BY ${order} LIMIT ${Number(opts.limit ?? 120)}`, ...params);
 }
 
 export async function jobCounts(userId: string) {
   return (await get<{ total: number; unseen: number; favs: number }>(
     `SELECT COUNT(*) AS total,
-            COALESCE(SUM(CASE WHEN seen=0 THEN 1 ELSE 0 END),0) AS unseen,
-            COALESCE(SUM(CASE WHEN favorite=1 THEN 1 ELSE 0 END),0) AS favs
-     FROM jobs WHERE user_id=? AND filtered=0`,
-    userId,
+            COALESCE(SUM(CASE WHEN COALESCE(u.seen, 0) = 0 THEN 1 ELSE 0 END), 0) AS unseen,
+            COALESCE(SUM(CASE WHEN COALESCE(u.favorite, 0) = 1 THEN 1 ELSE 0 END), 0) AS favs
+     FROM jobs j JOIN searches s ON s.id = j.search_id LEFT JOIN job_user u ON u.job_id = j.id AND u.user_id = ?
+     WHERE j.filtered = 0 AND ${ACCESS}`,
+    userId, userId, userId,
   ))!;
 }
 
 export const getJob = (userId: string, id: string) =>
-  get<Job>(
-    `SELECT j.*, s.name AS search_name, s.color AS search_color FROM jobs j
-     JOIN searches s ON s.id=j.search_id WHERE j.id=? AND j.user_id=?`,
-    id, userId,
-  );
+  get<Job>(`SELECT ${JOB_COLS} ${JOB_FROM} WHERE j.id = ? AND ${ACCESS}`, userId, userId, id, userId, userId); // is_owner, join, id, acesso(2)
 
 export const getJobById = (id: string) => get<Job>("SELECT * FROM jobs WHERE id=?", id);
 
@@ -326,33 +366,39 @@ export async function insertJob(j: Pick<Job, "id" | "user_id" | "search_id" | "t
   return (r.rowCount ?? 0) > 0;
 }
 
+/** Favoritar/desfavoritar é pessoal. Quem chama já checou o acesso à vaga (getJob). */
 export async function setFavorite(userId: string, id: string, fav: boolean) {
   if (!fav) {
-    await run("UPDATE jobs SET favorite=0, favorited_at=NULL, stage=NULL, seen=1 WHERE id=? AND user_id=?", id, userId);
+    await run(
+      `INSERT INTO job_user (job_id, user_id, favorite, seen) VALUES (?, ?, 0, 1)
+       ON CONFLICT (job_id, user_id) DO UPDATE SET favorite = 0, favorited_at = NULL, stage = NULL, seen = 1`,
+      id, userId,
+    );
     return;
   }
-  // favoritar = querer se candidatar: entra no fim da primeira coluna do kanban
+  // favoritar = querer se candidatar: entra no fim da primeira coluna do kanban de quem favoritou
   await run(
-    `UPDATE jobs SET favorite=1, favorited_at=?, seen=1,
-       stage = COALESCE(stage, 'todo'),
-       stage_pos = CASE WHEN stage IS NULL THEN COALESCE((SELECT MAX(stage_pos)+1 FROM jobs WHERE user_id=? AND stage='todo'), 0) ELSE stage_pos END
-     WHERE id=? AND user_id=?`,
-    Date.now(), userId, id, userId,
+    `INSERT INTO job_user (job_id, user_id, favorite, favorited_at, seen, stage, stage_pos)
+     VALUES (?, ?, 1, ?, 1, 'todo', (SELECT COALESCE(MAX(stage_pos) + 1, 0) FROM job_user WHERE user_id = ? AND stage = 'todo'))
+     ON CONFLICT (job_id, user_id) DO UPDATE SET favorite = 1, favorited_at = EXCLUDED.favorited_at, seen = 1,
+       stage = COALESCE(job_user.stage, 'todo'),
+       stage_pos = CASE WHEN job_user.stage IS NULL THEN EXCLUDED.stage_pos ELSE job_user.stage_pos END`,
+    id, userId, Date.now(), userId,
   );
 }
 
-/** Move uma vaga para uma etapa, na posição `index`, renumerando a coluna destino. */
+/** Move uma vaga para uma etapa do kanban DESTA pessoa, na posição `index`, renumerando a coluna destino. */
 export async function moveJob(userId: string, id: string, stage: string, index: number) {
   await ready();
   const c = await pool().connect();
   try {
     await c.query("BEGIN");
-    const own = await c.query("SELECT 1 FROM jobs WHERE id=$1 AND user_id=$2 AND favorite=1", [id, userId]);
+    const own = await c.query("SELECT 1 FROM job_user WHERE job_id=$1 AND user_id=$2 AND favorite=1", [id, userId]);
     if (!own.rowCount) throw new Error("Vaga não encontrada");
-    const col = (await c.query("SELECT id FROM jobs WHERE user_id=$1 AND stage=$2 AND id<>$3 ORDER BY stage_pos ASC, favorited_at DESC", [userId, stage, id])).rows.map((r) => r.id as string);
+    const col = (await c.query("SELECT job_id FROM job_user WHERE user_id=$1 AND stage=$2 AND job_id<>$3 ORDER BY stage_pos ASC, favorited_at DESC", [userId, stage, id])).rows.map((r) => r.job_id as string);
     col.splice(Math.min(Math.max(index, 0), col.length), 0, id);
     for (let i = 0; i < col.length; i++) {
-      await c.query("UPDATE jobs SET stage_pos=$1, stage=$2 WHERE id=$3", [i, stage, col[i]]);
+      await c.query("UPDATE job_user SET stage_pos=$1, stage=$2 WHERE job_id=$3 AND user_id=$4", [i, stage, col[i], userId]);
     }
     await c.query("COMMIT");
   } catch (e) {
@@ -370,48 +416,125 @@ export const setDescription = (id: string, text: string) => run("UPDATE jobs SET
 /** Vagas do LinkedIn ainda sem descrição lida (as mais novas primeiro), para checar regras "na descrição". */
 export const jobsNeedingDescription = (searchId: string, limit: number) =>
   all<Pick<Job, "id" | "title" | "url">>(
-    "SELECT id, title, url FROM jobs WHERE search_id=? AND source='linkedin' AND description IS NULL AND filter_keep=0 AND favorite=0 ORDER BY found_at DESC LIMIT " + Number(limit),
+    "SELECT id, title, url FROM jobs WHERE search_id=? AND source='linkedin' AND description IS NULL AND filter_keep=0 ORDER BY found_at DESC LIMIT " + Number(limit),
     searchId,
   );
 
 export const markFiltered = (id: string, reason: string) => run("UPDATE jobs SET filtered=1, filtered_reason=? WHERE id=? AND filter_keep=0", reason, id);
 
-/** "Manter na lista": desfaz o filtro e impede que ele volte a barrar essa vaga. */
+/** "Manter na lista": só a dona da busca. Desfaz o filtro e impede que ele volte a barrar essa vaga. */
 export const keepJob = (userId: string, id: string) =>
-  run("UPDATE jobs SET filtered=0, filtered_reason=NULL, filter_keep=1 WHERE id=? AND user_id=?", id, userId);
+  run("UPDATE jobs SET filtered=0, filtered_reason=NULL, filter_keep=1 WHERE id=? AND search_id IN (SELECT id FROM searches WHERE user_id=?)", id, userId);
 
 export async function filteredCount(userId: string, searchId: string | null) {
   const r = await get<{ n: number }>(
-    searchId ? "SELECT COUNT(*) AS n FROM jobs WHERE user_id=? AND filtered=1 AND search_id=?" : "SELECT COUNT(*) AS n FROM jobs WHERE user_id=? AND filtered=1",
-    ...(searchId ? [userId, searchId] : [userId]),
+    `SELECT COUNT(*) AS n FROM jobs j JOIN searches s ON s.id = j.search_id WHERE j.filtered = 1 AND ${ACCESS}${searchId ? " AND j.search_id = ?" : ""}`,
+    ...(searchId ? [userId, userId, searchId] : [userId, userId]),
   );
   return r?.n ?? 0;
 }
 
 export const jobsForCleanup = (searchId: string) =>
-  all<Pick<Job, "id" | "title" | "url" | "snippet" | "source">>("SELECT id, title, url, snippet, source FROM jobs WHERE search_id=? AND favorite=0", searchId);
+  all<Pick<Job, "id" | "title" | "url" | "snippet" | "source">>("SELECT id, title, url, snippet, source FROM jobs WHERE search_id=? AND NOT EXISTS (SELECT 1 FROM job_user u WHERE u.job_id = jobs.id AND u.favorite = 1)", searchId);
 export const deleteJobs = async (ids: string[]) => {
   if (ids.length) await run(`DELETE FROM jobs WHERE id IN (${ids.map(() => "?").join(",")})`, ...ids);
 };
 
-export const markSeen = (userId: string, id: string) => run("UPDATE jobs SET seen=1 WHERE id=? AND user_id=?", id, userId);
+export const markSeen = (userId: string, id: string) =>
+  run("INSERT INTO job_user (job_id, user_id, seen) VALUES (?, ?, 1) ON CONFLICT (job_id, user_id) DO UPDATE SET seen = 1", id, userId);
 
 export const markAllSeen = (userId: string, searchId: string | null) =>
-  searchId
-    ? run("UPDATE jobs SET seen=1 WHERE user_id=? AND search_id=?", userId, searchId)
-    : run("UPDATE jobs SET seen=1 WHERE user_id=?", userId);
+  run(
+    `INSERT INTO job_user (job_id, user_id, seen)
+     SELECT j.id, ?, 1 FROM jobs j JOIN searches s ON s.id = j.search_id WHERE ${ACCESS}${searchId ? " AND j.search_id = ?" : ""}
+     ON CONFLICT (job_id, user_id) DO UPDATE SET seen = 1`,
+    ...(searchId ? [userId, userId, userId, searchId] : [userId, userId, userId]),
+  );
 
 export const setContactsStatus = (id: string, status: Job["contacts_status"], error: string | null = null, note: string | null = null) =>
   run("UPDATE jobs SET contacts_status=?, contacts_error=?, contacts_note=? WHERE id=?", status, error, note, id);
 
 /** Reserva a busca de contatos (idempotência): só quem muda o status para "pending" executa. */
-export async function claimContacts(userId: string, id: string, force = false) {
+export async function claimContacts(_userId: string, id: string, force = false) {
+  // Contatos são públicos e valem para a vaga toda (quem tem acesso à vaga os vê); o acesso já foi checado.
   const r = await run(
     `UPDATE jobs SET contacts_status='pending', contacts_error=NULL
-     WHERE id=? AND user_id=? AND contacts_status != 'pending' ${force ? "" : "AND contacts_status != 'done'"}`,
-    id, userId,
+     WHERE id=? AND contacts_status != 'pending' ${force ? "" : "AND contacts_status != 'done'"}`,
+    id,
   );
   return (r.rowCount ?? 0) > 0;
+}
+
+/* ---------- compartilhamento ---------- */
+
+export type Member = {
+  id: string; search_id: string; email: string; user_id: string | null; status: "pending" | "accepted";
+  inviter_name: string | null; member_name: string | null; token: string; created_at: number; accepted_at: number | null;
+};
+export type PendingInvite = Member & { search_name: string; search_color: string };
+
+export const listMembers = (ownerId: string, searchId: string) =>
+  all<Member>(
+    `SELECT m.* FROM search_members m JOIN searches s ON s.id = m.search_id WHERE m.search_id = ? AND s.user_id = ? ORDER BY m.created_at ASC`,
+    searchId, ownerId,
+  );
+
+/** Convida um e-mail para ver a busca. Só a dona convida. Reconvidar um pendente devolve o mesmo convite. */
+export async function inviteMember(ownerId: string, searchId: string, email: string, inviterName: string | null) {
+  const search = await getSearch(ownerId, searchId);
+  if (!search) throw new Error("Busca não encontrada");
+  const e = email.trim().toLowerCase();
+  const cur = await get<Member>("SELECT * FROM search_members WHERE search_id = ? AND email = ?", searchId, e);
+  if (cur?.status === "accepted") throw new Error("Essa pessoa já tem acesso a esta busca.");
+  if (cur) return { member: cur, created: false };
+  const member: Member = {
+    id: randomUUID(), search_id: searchId, email: e, user_id: null, status: "pending",
+    inviter_name: inviterName, member_name: null, token: randomBytes(18).toString("base64url"), created_at: Date.now(), accepted_at: null,
+  };
+  await run(
+    "INSERT INTO search_members (id, search_id, email, status, invited_by, inviter_name, token, created_at) VALUES (?, ?, ?, 'pending', ?, ?, ?, ?)",
+    member.id, searchId, e, ownerId, inviterName, member.token, member.created_at,
+  );
+  return { member, created: true };
+}
+
+export const removeMember = (ownerId: string, memberId: string) =>
+  run("DELETE FROM search_members WHERE id = ? AND search_id IN (SELECT id FROM searches WHERE user_id = ?)", memberId, ownerId);
+
+export const leaveSearch = (userId: string, searchId: string) =>
+  run("DELETE FROM search_members WHERE search_id = ? AND user_id = ?", searchId, userId);
+
+export async function pendingInvitesFor(emails: string[]) {
+  if (!emails.length) return [] as PendingInvite[];
+  await ready();
+  const r = await pool().query(
+    `SELECT m.*, s.name AS search_name, s.color AS search_color FROM search_members m JOIN searches s ON s.id = m.search_id
+     WHERE m.status = 'pending' AND m.email = ANY($1) ORDER BY m.created_at DESC`,
+    [emails],
+  );
+  return r.rows as PendingInvite[];
+}
+
+export const inviteByToken = (token: string) =>
+  get<PendingInvite>(
+    `SELECT m.*, s.name AS search_name, s.color AS search_color FROM search_members m JOIN searches s ON s.id = m.search_id WHERE m.token = ?`,
+    token,
+  );
+
+/** Aceita um convite pendente — só vale se o e-mail do convite for um dos e-mails verificados de quem aceita. */
+export async function acceptInvite(userId: string, emails: string[], by: { id?: string; token?: string }, name: string | null) {
+  await ready();
+  const r = await pool().query(
+    `UPDATE search_members SET status = 'accepted', user_id = $1, member_name = $2, accepted_at = $3
+     WHERE status = 'pending' AND email = ANY($4) AND ${by.id ? "id = $5" : "token = $5"} RETURNING search_id`,
+    [userId, name, Date.now(), emails, by.id ?? by.token],
+  );
+  return r.rows[0]?.search_id as string | undefined;
+}
+
+export async function declineInvite(emails: string[], memberId: string) {
+  await ready();
+  await pool().query("DELETE FROM search_members WHERE id = $1 AND status = 'pending' AND email = ANY($2)", [memberId, emails]);
 }
 
 /* ---------- contacts ---------- */

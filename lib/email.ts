@@ -74,3 +74,25 @@ export function renderDigest(o: {
 
   return { subject, html, text };
 }
+
+export function renderInvite(o: { inviterName: string; searchName: string; acceptUrl: string; appUrl: string }) {
+  const subject = `${o.inviterName} convidou você para a busca “${o.searchName}”`;
+  const html = `<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(subject)}</title></head>
+<body style="margin:0;padding:0;background:#f6f3ec;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f6f3ec"><tr><td align="center" style="padding:28px 14px">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:520px">
+      <tr><td style="padding:0 4px 18px 4px;font-size:20px;color:#17140f;font-family:Georgia,'Times New Roman',serif"><span style="color:#e8501f">●</span>&nbsp;Namadi <em style="color:#5a544a">vagas</em></td></tr>
+      <tr><td style="background:#ffffff;border:1px solid #e5dfd1;border-radius:20px;padding:26px 24px">
+        <div style="font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:#8e8779;font-weight:600">Convite</div>
+        <div style="margin-top:8px;font-family:Georgia,'Times New Roman',serif;font-size:28px;line-height:1.15;color:#17140f"><strong style="font-weight:400">${esc(o.inviterName)}</strong> compartilhou uma busca de vagas com você</div>
+        <div style="margin-top:14px;font-size:15px;line-height:1.6;color:#5a544a">Busca: <strong style="color:#17140f">${esc(o.searchName)}</strong>.<br>Ao aceitar, você vê as vagas que o robô encontrar. Seus favoritos e seu Kanban continuam só seus.</div>
+        <div style="margin-top:22px"><a href="${esc(o.acceptUrl)}" style="display:inline-block;background:#e8501f;color:#ffffff;font-weight:700;font-size:15px;text-decoration:none;padding:13px 26px;border-radius:999px">Ver convite</a></div>
+        <div style="margin-top:18px;font-size:12px;color:#8e8779;line-height:1.6">Use o mesmo e-mail que recebeu esta mensagem para entrar. Se você não esperava este convite, é só ignorar.</div>
+      </td></tr>
+    </table>
+  </td></tr></table>
+</body></html>`;
+  const text = `${o.inviterName} compartilhou a busca "${o.searchName}" com você.\n\nVer convite: ${o.acceptUrl}\n\nUse o mesmo e-mail que recebeu esta mensagem para entrar. Se não esperava, ignore.`;
+  return { subject, html, text };
+}

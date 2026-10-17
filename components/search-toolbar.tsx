@@ -2,15 +2,17 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { CheckCheck, Pause, Pencil, Play, RefreshCw, Trash2 } from "lucide-react";
-import { removeSearch, runNow, seeAll, toggleSearch } from "@/app/actions";
+import { CheckCheck, LogOut, Pause, Pencil, Play, RefreshCw, Share2, Trash2 } from "lucide-react";
+import { leaveSharedSearch, removeSearch, runNow, seeAll, toggleSearch } from "@/app/actions";
 import { SearchDialog } from "./search-dialog";
+import { ShareDialog } from "./share-dialog";
 import type { Search } from "@/lib/types";
 
 export function SearchToolbar({ search, unseen }: { search: Search; unseen: number }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [edit, setEdit] = useState(false);
+  const [share, setShare] = useState(false);
   const [confirm, setConfirm] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const attempt = (fn: () => Promise<void>) =>
@@ -36,6 +38,7 @@ export function SearchToolbar({ search, unseen }: { search: Search; unseen: numb
         {search.active ? <><Pause className="size-4" /> Pausar</> : <><Play className="size-4" /> Retomar</>}
       </button>
       <button className={btn} onClick={() => setEdit(true)}><Pencil className="size-4" /> Editar</button>
+      <button className={btn} onClick={() => setShare(true)}><Share2 className="size-4" /> Compartilhar{(search.shared_count ?? 0) > 0 ? <span className="rounded-full bg-accent-soft px-1.5 text-xs text-accent">{search.shared_count}</span> : null}</button>
       {unseen > 0 && <button className={btn} onClick={() => attempt(async () => { await seeAll(search.id); })}><CheckCheck className="size-4" /> Marcar vistas</button>}
       {confirm ? (
         <span className="anim-pop inline-flex items-center gap-1 rounded-full border border-accent bg-accent-soft py-1 pr-1 pl-4 text-sm text-accent">
@@ -48,6 +51,30 @@ export function SearchToolbar({ search, unseen }: { search: Search; unseen: numb
       )}
       {msg && <span role="status" className="anim-pop text-sm text-ink-2">{msg}</span>}
       <SearchDialog open={edit} onClose={() => setEdit(false)} initial={search} />
+      {share && <ShareDialog searchId={search.id} searchName={search.name} onClose={() => setShare(false)} />}
+    </div>
+  );
+}
+
+/** Barra do convidado: ele só acompanha a busca; quem administra é a dona. */
+export function SharedToolbar({ search, unseen, ownerName }: { search: Search; unseen: number; ownerName: string | null }) {
+  const router = useRouter();
+  const [pending, start] = useTransition();
+  const [confirm, setConfirm] = useState(false);
+  const btn = "inline-flex shrink-0 items-center gap-2 rounded-full border border-line bg-surface px-4 py-2.5 text-sm font-medium whitespace-nowrap transition hover:bg-surface-2 disabled:opacity-50 sm:py-2";
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <span className="inline-flex items-center gap-2 rounded-full bg-accent-soft px-3.5 py-2 text-sm text-accent">Compartilhada por <strong className="font-semibold">{ownerName ?? "alguém"}</strong></span>
+      {unseen > 0 && <button className={btn} disabled={pending} onClick={() => start(async () => { await seeAll(search.id); })}><CheckCheck className="size-4" /> Marcar vistas</button>}
+      {confirm ? (
+        <span className="anim-pop inline-flex items-center gap-1 rounded-full border border-accent bg-accent-soft py-1 pr-1 pl-4 text-sm text-accent">
+          Sair desta busca?
+          <button className="rounded-full bg-accent px-3 py-1 font-medium text-accent-ink" onClick={() => start(async () => { await leaveSharedSearch(search.id); router.push("/dashboard"); })}>Sair</button>
+          <button className="rounded-full px-3 py-1" onClick={() => setConfirm(false)}>Não</button>
+        </span>
+      ) : (
+        <button className={`${btn} text-ink-3 hover:text-accent`} onClick={() => setConfirm(true)}><LogOut className="size-4" /> Sair da busca</button>
+      )}
     </div>
   );
 }

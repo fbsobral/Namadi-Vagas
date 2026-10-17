@@ -19,6 +19,9 @@ export type Search = {
   notify_email: string | null;
   notify_since: number | null;
   notify_last_at: number | null;
+  is_owner?: boolean; // false = busca compartilhada comigo
+  owner_name?: string | null;
+  shared_count?: number;
   // agregados
   total?: number;
   unseen?: number;
@@ -48,6 +51,7 @@ export type Job = {
   filtered: number; // 1 = barrada por regra "na descrição" (aba Filtradas)
   filtered_reason: string | null;
   filter_keep: number; // 1 = usuário mandou manter, não filtrar de novo
+  is_owner?: boolean;
   search_name?: string;
   search_color?: string;
 };

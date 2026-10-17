@@ -44,3 +44,6 @@ Cada grupo de palavras escolhe onde procurar: **título e descrição** (padrão
 
 ## Resumo por e-mail (Resend)
 Defina `RESEND_API_KEY`, `MAIL_FROM` (domínio verificado no Resend) e `APP_URL`. Em cada busca: desligado, a cada rodada com vagas novas, ou resumo diário às 8h (horário de São Paulo). Há um botão de e-mail de teste no editor da busca e um link de "parar de receber" em cada e-mail.
+
+## Compartilhar buscas
+No editor da busca (dono), **Compartilhar** convida por e-mail. A pessoa vê o convite no painel (ou pelo link `/convite/...`) e só consegue aceitar entrando com o mesmo e-mail verificado. Quem aceita vê as vagas da busca; **favoritos, etapas do Kanban e "visto" são individuais** (tabela `job_user`). Só o dono edita, pausa, roda, exclui, convida e recebe os e-mails de resumo. O convidado pode sair a qualquer momento. Se o Resend estiver configurado, o convite também vai por e-mail.

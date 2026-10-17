@@ -21,6 +21,8 @@ type Props = {
 export function Sidebar({ searches, counts, currentId, filter, view = "list", robotOnline, children }: Props) {
   const [mobile, setMobile] = useState(false);
   const [dialog, setDialog] = useState(false);
+  const mine = searches.filter((s) => s.is_owner !== false);
+  const shared = searches.filter((s) => s.is_owner === false);
   const allActive = !currentId && filter !== "fav";
   const favActive = !currentId && filter === "fav";
 
@@ -41,25 +43,21 @@ export function Sidebar({ searches, counts, currentId, filter, view = "list", ro
         <button onClick={() => { setDialog(true); setMobile(false); }} className="grid size-7 place-items-center rounded-full bg-ink text-bg transition hover:bg-accent hover:text-accent-ink" aria-label="Nova busca"><Plus className="size-4" /></button>
       </div>
 
-      <div className="scroll-thin mt-2 flex-1 space-y-0.5 overflow-y-auto px-3 pb-4" onClick={() => setMobile(false)}>
-        {searches.map((s) => {
-          const active = s.id === currentId;
-          const running = s.last_status === "running";
-          return (
-            <Link key={s.id} href={`/dashboard?s=${s.id}${view === "board" ? "&v=board" : ""}`} className={`group flex items-center gap-3 rounded-xl px-3 py-2.5 transition ${active ? "bg-surface shadow-card" : "hover:bg-surface/60"}`}>
-              <span className={`size-2.5 shrink-0 rounded-full ${running ? "pulse-dot" : ""} ${s.active ? "" : "opacity-30"}`} style={{ background: s.color, ["--dot" as string]: s.color }} />
-              <span className="min-w-0 flex-1">
-                <span className={`block truncate text-sm ${active ? "font-medium" : "text-ink-2 group-hover:text-ink"}`}>{s.name}</span>
-                <span className="block truncate text-xs text-ink-3">{!s.active ? "pausada" : running ? "buscando agora…" : freqLabel(s.freq_minutes)}</span>
-              </span>
-              {(s.unseen ?? 0) > 0 && <span className="rounded-full bg-accent px-1.5 py-0.5 text-[11px] leading-none font-semibold text-accent-ink">{s.unseen}</span>}
-            </Link>
-          );
-        })}
-        {searches.length === 0 && (
-          <button onClick={() => setDialog(true)} className="w-full rounded-2xl border border-dashed border-line p-4 text-left text-sm text-ink-3 transition hover:border-accent hover:text-accent">
-            Crie sua primeira busca →
-          </button>
+      <div className="scroll-thin mt-2 flex-1 overflow-y-auto px-3 pb-4" onClick={() => setMobile(false)}>
+        <div className="space-y-0.5">
+          {mine.map((s) => <SearchLink key={s.id} s={s} active={s.id === currentId} view={view} />)}
+          {mine.length === 0 && (
+            <button onClick={() => setDialog(true)} className="w-full rounded-2xl border border-dashed border-line p-4 text-left text-sm text-ink-3 transition hover:border-accent hover:text-accent">
+              Crie sua primeira busca →
+            </button>
+          )}
+        </div>
+
+        {shared.length > 0 && (
+          <div className="mt-6">
+            <p className="mb-2 px-2 text-[11px] font-medium tracking-wider text-ink-3 uppercase">Compartilhadas comigo</p>
+            <div className="space-y-0.5">{shared.map((s) => <SearchLink key={s.id} s={s} active={s.id === currentId} view={view} />)}</div>
+          </div>
         )}
       </div>
 
@@ -89,6 +87,24 @@ export function Sidebar({ searches, counts, currentId, filter, view = "list", ro
 
       <SearchDialog open={dialog} onClose={() => setDialog(false)} />
     </>
+  );
+}
+
+function SearchLink({ s, active, view }: { s: Search; active: boolean; view: "list" | "board" }) {
+  const running = s.last_status === "running";
+  const sharedWithMe = s.is_owner === false;
+  return (
+    <Link href={`/dashboard?s=${s.id}${view === "board" ? "&v=board" : ""}`} className={`group flex items-center gap-3 rounded-xl px-3 py-2.5 transition ${active ? "bg-surface shadow-card" : "hover:bg-surface/60"}`}>
+      <span className={`size-2.5 shrink-0 rounded-full ${running ? "pulse-dot" : ""} ${s.active ? "" : "opacity-30"}`} style={{ background: s.color, ["--dot" as string]: s.color }} />
+      <span className="min-w-0 flex-1">
+        <span className={`block truncate text-sm ${active ? "font-medium" : "text-ink-2 group-hover:text-ink"}`}>{s.name}</span>
+        <span className="block truncate text-xs text-ink-3">
+          {sharedWithMe ? `de ${s.owner_name ?? "alguém"}` : !s.active ? "pausada" : running ? "buscando agora…" : freqLabel(s.freq_minutes)}
+          {!sharedWithMe && (s.shared_count ?? 0) > 0 ? ` · com ${s.shared_count} ${s.shared_count === 1 ? "pessoa" : "pessoas"}` : ""}
+        </span>
+      </span>
+      {(s.unseen ?? 0) > 0 && <span className="rounded-full bg-accent px-1.5 py-0.5 text-[11px] leading-none font-semibold text-accent-ink">{s.unseen}</span>}
+    </Link>
   );
 }
 

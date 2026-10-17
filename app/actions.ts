@@ -3,10 +3,10 @@
 import { randomUUID } from "node:crypto";
 import { after } from "next/server";
 import { revalidatePath } from "next/cache";
-import { getUserId, getViewerEmail } from "@/lib/auth";
+import { getUserId, getViewer, getViewerEmail } from "@/lib/auth";
 import * as q from "@/lib/db";
 import { runSearch } from "@/lib/runner";
-import { renderDigest } from "@/lib/email";
+import { renderDigest, renderInvite } from "@/lib/email";
 import { appUrl, mailConfigured, sendMail } from "@/lib/mailer";
 import { signUnsub } from "@/lib/unsub";
 import { findContacts } from "@/lib/contacts";
@@ -110,7 +110,9 @@ export async function retryContacts(jobId: string) {
 }
 
 export async function seeJob(jobId: string) {
-  await q.markSeen(await uid(), jobId);
+  const userId = await uid();
+  if (!(await q.getJob(userId, jobId))) return; // sem acesso: ignora
+  await q.markSeen(userId, jobId);
   refresh();
 }
 
@@ -170,4 +172,66 @@ export async function ensureDescription(jobId: string) {
   await q.setDescription(jobId, text ?? "");
   refresh();
   return text ?? "";
+}
+
+/* ------------------------------ compartilhamento ------------------------------ */
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+
+/** Membros e convites da busca (só a dona vê). */
+export async function getShareInfo(searchId: string) {
+  return q.listMembers(await uid(), searchId);
+}
+
+/** Convida um e-mail. Sempre devolve o link; manda o e-mail do convite também, se o envio estiver configurado. */
+export async function inviteToSearch(searchId: string, email: string) {
+  const viewer = await getViewer();
+  if (!viewer) throw new Error("Não autenticado");
+  const e = email.trim().toLowerCase();
+  if (!EMAIL_RE.test(e)) throw new Error("Esse e-mail não parece válido.");
+  if (viewer.emails.includes(e)) throw new Error("Esse é o seu próprio e-mail.");
+  const search = await q.getSearch(viewer.userId, searchId);
+  if (!search) throw new Error("Só quem criou a busca pode convidar.");
+
+  const { member, created } = await q.inviteMember(viewer.userId, searchId, e, viewer.name);
+  let emailed = false;
+  let emailError: string | undefined;
+  if (created && mailConfigured()) {
+    try {
+      const mail = renderInvite({ inviterName: viewer.name, searchName: search.name, acceptUrl: `${appUrl()}/convite/${member.token}`, appUrl: appUrl() });
+      await sendMail({ to: e, ...mail });
+      emailed = true;
+    } catch (err) {
+      emailError = err instanceof Error ? err.message : String(err);
+    }
+  }
+  refresh();
+  return { member, emailed, emailError };
+}
+
+export async function removeMemberAction(memberId: string) {
+  await q.removeMember(await uid(), memberId);
+  refresh();
+}
+
+export async function leaveSharedSearch(searchId: string) {
+  await q.leaveSearch(await uid(), searchId);
+  refresh();
+}
+
+/** Aceita pelo painel (id do convite) ou pelo link (token). Só funciona com o e-mail do convite. */
+export async function acceptInviteAction(by: { id?: string; token?: string }) {
+  const viewer = await getViewer();
+  if (!viewer) throw new Error("Não autenticado");
+  const searchId = await q.acceptInvite(viewer.userId, viewer.emails, by, viewer.name);
+  if (!searchId) throw new Error("Esse convite é para outro e-mail ou não está mais disponível.");
+  refresh();
+  return searchId;
+}
+
+export async function declineInviteAction(memberId: string) {
+  const viewer = await getViewer();
+  if (!viewer) throw new Error("Não autenticado");
+  await q.declineInvite(viewer.emails, memberId);
+  refresh();
 }

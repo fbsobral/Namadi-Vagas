@@ -1,16 +1,16 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { currentUser } from "@clerk/nextjs/server";
-import { getUserId } from "@/lib/auth";
+import { getUserId, getViewer } from "@/lib/auth";
 import { UserButton } from "@clerk/nextjs";
 import { AlertTriangle, Columns3, LayoutList, Radar as RadarIcon, Star } from "lucide-react";
-import { filteredCount, getJob, getKv, jobCounts, listContacts, listJobs, listRuns, listSearches, type JobFilter } from "@/lib/db";
+import { filteredCount, getJob, getKv, pendingInvitesFor, jobCounts, listContacts, listJobs, listRuns, listSearches, type JobFilter } from "@/lib/db";
 import { isDemoMode } from "@/lib/serp";
 import { freqLabel, sourceLabel } from "@/lib/sources";
 import { includeTerms, parseSpec, specToBoolean } from "@/lib/query";
 import { isFresh, timeAgo } from "@/lib/format";
 import { Sidebar } from "@/components/sidebar";
-import { SearchToolbar } from "@/components/search-toolbar";
+import { SearchToolbar, SharedToolbar } from "@/components/search-toolbar";
+import { InviteBanner } from "@/components/invite-banner";
 import { JobCard } from "@/components/job-card";
 import { JobDrawer } from "@/components/job-drawer";
 import { AutoRefresh } from "@/components/auto-refresh";
@@ -26,7 +26,8 @@ export default async function Dashboard({ searchParams }: PageProps<"/dashboard"
   const sp = await searchParams;
   const one = (k: string) => (typeof sp[k] === "string" ? (sp[k] as string) : null);
 
-  const [searches, counts, user] = await Promise.all([listSearches(userId), jobCounts(userId), currentUser()]);
+  const [searches, counts, viewer] = await Promise.all([listSearches(userId), jobCounts(userId), getViewer()]);
+  const invites = await pendingInvitesFor(viewer?.emails ?? []);
   const current = searches.find((s) => s.id === one("s")) ?? null;
   const view = one("v") === "board" ? "board" : "list";
   const filter: JobFilter = view === "board" ? "board" : one("f") === "new" ? "new" : one("f") === "fav" ? "fav" : one("f") === "filtered" ? "filtered" : "all";
@@ -67,8 +68,8 @@ export default async function Dashboard({ searchParams }: PageProps<"/dashboard"
       <Sidebar searches={searches} counts={counts} currentId={current?.id ?? null} filter={filter} view={view} robotOnline={isFresh(beat?.updated_at, 3 * 60_000)}>
         <UserButton />
         <div className="min-w-0 text-sm">
-          <p className="truncate font-medium">{user?.firstName ?? user?.username ?? "Você"}</p>
-          <p className="truncate text-xs text-ink-3">{user?.primaryEmailAddress?.emailAddress}</p>
+          <p className="truncate font-medium">{viewer?.firstName ?? viewer?.name ?? "Você"}</p>
+          <p className="truncate text-xs text-ink-3">{viewer?.email}</p>
         </div>
       </Sidebar>
 
@@ -83,6 +84,8 @@ export default async function Dashboard({ searchParams }: PageProps<"/dashboard"
 
           <div className="mb-5 hidden justify-end lg:flex"><RobotStatus lastBeat={beat?.updated_at ?? null} online={isFresh(beat?.updated_at, 3 * 60_000)} /></div>
 
+          <InviteBanner invites={invites} />
+
           <header className="anim-rise">
             <div className="flex items-center gap-2 text-sm text-ink-3">
               {current && <span className="size-2.5 rounded-full" style={{ background: current.color }} />}
@@ -96,7 +99,7 @@ export default async function Dashboard({ searchParams }: PageProps<"/dashboard"
                   Última rodada {timeAgo(current.last_run_at)}{current.active && current.next_run_at ? ` · próxima ${timeAgo(current.next_run_at)}` : ""}
                 </p>
                 {current.last_status === "error" && <p className="mt-2 inline-flex items-center gap-2 rounded-lg bg-accent-soft px-3 py-1.5 text-sm text-accent"><AlertTriangle className="size-4" /> {current.last_error}</p>}
-                <div className="mt-5"><SearchToolbar search={current} unseen={jobs.filter((j) => !j.seen).length} /></div>
+                <div className="mt-5">{current.is_owner === false ? <SharedToolbar search={current} unseen={jobs.filter((j) => !j.seen).length} ownerName={current.owner_name ?? null} /> : <SearchToolbar search={current} unseen={jobs.filter((j) => !j.seen).length} />}</div>
                 <RunHistory runs={runs} />
               </>
             ) : (
