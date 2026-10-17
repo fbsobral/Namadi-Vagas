@@ -79,7 +79,7 @@ export function CvFill({ onApply, onUndo, canUndo, onCreated }: {
 
       {phase.t === "done" && (
         <div className="anim-pop rounded-2xl border border-accent/30 bg-accent-soft/40 p-4">
-          <div className="flex items-start justify-between gap-3">
+          <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-2">
             <p className="flex items-center gap-2 font-medium"><Check className="size-4 text-ok" /> Formulário preenchido a partir do seu CV</p>
             <div className="flex shrink-0 gap-1.5">
               {canUndo && <button type="button" onClick={onUndo} className="inline-flex items-center gap-1 rounded-full border border-line bg-surface px-3 py-1 text-xs font-medium transition hover:bg-surface-2"><Undo2 className="size-3.5" /> Desfazer</button>}

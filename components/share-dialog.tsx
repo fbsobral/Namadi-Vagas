@@ -86,9 +86,9 @@ export function ShareDialog({ searchId, searchName, onClose }: { searchId: strin
           ) : (
             <ul className="space-y-2">
               {members.map((m) => (
-                <li key={m.id} className="flex items-center gap-3 rounded-2xl border border-line bg-bg p-3">
+                <li key={m.id} className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-2xl border border-line bg-bg p-3">
                   <Avatar name={m.member_name ?? m.email} size={38} round />
-                  <div className="min-w-0 flex-1">
+                  <div className="min-w-[8rem] flex-1">
                     <p className="truncate text-sm font-medium">{m.member_name ?? m.email}</p>
                     <p className="truncate text-xs text-ink-3">{m.member_name ? m.email : "aguardando aceite"}</p>
                   </div>
