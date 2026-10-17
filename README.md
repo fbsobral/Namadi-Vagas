@@ -47,3 +47,6 @@ Defina `RESEND_API_KEY`, `MAIL_FROM` (domínio verificado no Resend) e `APP_URL`
 
 ## Compartilhar buscas
 No editor da busca (dono), **Compartilhar** convida por e-mail. A pessoa vê o convite no painel (ou pelo link `/convite/...`) e só consegue aceitar entrando com o mesmo e-mail verificado. Quem aceita vê as vagas da busca; **favoritos, etapas do Kanban e "visto" são individuais** (tabela `job_user`). Só o dono edita, pausa, roda, exclui, convida e recebe os e-mails de resumo. O convidado pode sair a qualquer momento. Se o Resend estiver configurado, o convite também vai por e-mail.
+
+## Preencher a busca com o CV
+No formulário da busca, **Preencher com meu currículo** (PDF, DOCX ou TXT, até 5 MB): o Claude (`claude-sonnet-5-5`, saída estruturada validada) lê o CV e sugere nome, grupos de palavras (cargos em português e inglês, senioridade), exclusões, local e até 2 variações que o CV sustente. Tudo fica editável e nada é criado até você confirmar. **O CV não é guardado**: é lido na hora e descartado. Requer `ANTHROPIC_API_KEY`; limite diário por usuário em `CV_DAILY_LIMIT` (padrão 10).

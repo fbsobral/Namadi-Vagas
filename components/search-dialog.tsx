@@ -9,6 +9,7 @@ import { buildGoogleQuery, FREQUENCIES, RECENCY, SOURCES } from "@/lib/sources";
 import { emptySpec, hasTerms, parseSpec, specToBoolean, specToQuery } from "@/lib/query";
 import { QueryBuilder } from "./query-builder";
 import { EmailSettings } from "./email-settings";
+import { CvFill } from "./cv-fill";
 import type { Search } from "@/lib/types";
 
 export function SearchDialog({ open, onClose, initial }: { open: boolean; onClose: () => void; initial?: Search | null }) {
@@ -20,6 +21,7 @@ function DialogBody({ onClose, initial }: { onClose: () => void; initial?: Searc
   const router = useRouter();
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [before, setBefore] = useState<SearchInput | null>(null); // para "Desfazer" o preenchimento pelo CV
   const [f, setF] = useState<SearchInput>(() =>
     initial
       ? { name: initial.name, spec: parseSpec(initial.query_spec, initial.query), location: initial.location, sources: JSON.parse(initial.sources), recency: initial.recency, freq_minutes: initial.freq_minutes, notify_mode: initial.notify_mode ?? "off" }
@@ -66,6 +68,13 @@ function DialogBody({ onClose, initial }: { onClose: () => void; initial?: Searc
         <button type="button" onClick={onClose} aria-label="Fechar" className="absolute top-5 right-5 grid size-9 place-items-center rounded-full text-ink-3 transition hover:bg-surface-2 hover:text-ink"><X className="size-5" /></button>
         <p className="text-xs font-medium tracking-wider text-accent uppercase">{initial ? "Editar busca" : "Nova busca"}</p>
         <h2 className="font-display mt-1 pr-10 text-3xl sm:text-4xl">{initial ? "Ajuste o radar" : "O que você procura?"}</h2>
+
+        <CvFill
+          canUndo={before !== null}
+          onUndo={() => { if (before) setF(before); setBefore(null); }}
+          onApply={(sug) => { setBefore((b) => b ?? f); setF((p) => ({ ...p, name: sug.name, spec: sug.spec, location: sug.location, recency: sug.recency })); }}
+          onCreated={() => router.refresh()}
+        />
 
         <label className="mt-6 block">
           <span className="mb-2 block text-sm font-medium">Nome da busca <span className="text-ink-3">(opcional)</span></span>
