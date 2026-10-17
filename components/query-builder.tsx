@@ -2,14 +2,14 @@
 
 import { useState } from "react";
 import { Plus, X } from "lucide-react";
-import type { Group, Op, QuerySpec } from "@/lib/query";
+import type { Group, Op, QuerySpec, Scope } from "@/lib/query";
 
 const EXAMPLES = ["Product Designer", "UX Designer", "Design Lead", "Engenheiro de dados", "Head de Marketing"];
 
 export function QueryBuilder({ spec, onChange }: { spec: QuerySpec; onChange: (s: QuerySpec) => void }) {
   const setGroup = (i: number, g: Group) => onChange({ ...spec, groups: spec.groups.map((x, k) => (k === i ? g : x)) });
   const removeGroup = (i: number) => onChange({ ...spec, groups: spec.groups.filter((_, k) => k !== i) });
-  const addGroup = () => onChange({ ...spec, groups: [...spec.groups, { op: "OR", terms: [] }] });
+  const addGroup = () => onChange({ ...spec, groups: [...spec.groups, { op: "OR", terms: [], scope: "any" }] });
   const empty = spec.groups.every((g) => g.terms.length === 0);
 
   return (
@@ -48,9 +48,16 @@ export function QueryBuilder({ spec, onChange }: { spec: QuerySpec; onChange: (s
         </button>
       )}
 
-      <div className="mt-5">
-        <span className="mb-1.5 block text-sm font-medium">Não pode conter <span className="font-normal text-ink-3">(opcional)</span></span>
-        <ChipInput terms={spec.exclude} onChange={(exclude) => onChange({ ...spec, exclude })} placeholder="ex.: estágio, jovem aprendiz" tone="neg" />
+      <div className="mt-5 grid gap-4 sm:grid-cols-2">
+        <div>
+          <span className="mb-1.5 block text-sm font-medium">Não pode conter no título <span className="font-normal text-ink-3">(opcional)</span></span>
+          <ChipInput terms={spec.exclude} onChange={(exclude) => onChange({ ...spec, exclude })} placeholder="ex.: estágio, jovem aprendiz" tone="neg" />
+        </div>
+        <div>
+          <span className="mb-1.5 block text-sm font-medium">Excluir também se estiver na descrição <span className="font-normal text-ink-3">(opcional)</span></span>
+          <ChipInput terms={spec.excludeBody ?? []} onChange={(excludeBody) => onChange({ ...spec, excludeBody })} placeholder="ex.: PJ, presencial" tone="neg" />
+          <p className="mt-1.5 text-xs text-ink-3">Vagas barradas aqui não somem: vão para a aba “Filtradas”.</p>
+        </div>
       </div>
     </div>
   );
@@ -61,7 +68,11 @@ function GroupCard({ index, isLast, group, canRemove, onChange, onRemove }: { in
     <div className="rounded-2xl border border-line bg-bg p-3">
       <div className="mb-2 flex items-center justify-between gap-2">
         <span className="text-xs font-medium tracking-wider text-ink-3 uppercase">Grupo {index + 1}</span>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-1.5">
+          <span className="flex items-center gap-2 text-xs text-ink-3">
+            procurar em:
+            <ScopeToggle value={group.scope ?? "any"} onChange={(scope) => onChange({ ...group, scope })} />
+          </span>
           {group.terms.length > 1 && (
             <span className="flex items-center gap-2 text-xs text-ink-3">
               entre os termos:
@@ -104,6 +115,17 @@ function ChipInput({ terms, onChange, placeholder, tone, autoFocus }: { terms: s
         className="min-w-[140px] flex-1 bg-transparent px-1.5 py-1 text-[15px] outline-none placeholder:text-ink-3"
       />
     </div>
+  );
+}
+
+function ScopeToggle({ value, onChange }: { value: Scope; onChange: (s: Scope) => void }) {
+  return (
+    <span role="group" aria-label="Onde procurar" className="inline-flex rounded-full border border-line bg-surface p-0.5 text-xs font-semibold">
+      {([["any", "Título e descrição"], ["title", "Só título"]] as const).map(([k, l]) => (
+        <button type="button" key={k} aria-pressed={value === k} onClick={() => onChange(k)}
+          className={`rounded-full px-3 py-1 whitespace-nowrap transition ${value === k ? "bg-ink text-bg" : "text-ink-3 hover:text-ink"}`}>{l}</button>
+      ))}
+    </span>
   );
 }
 

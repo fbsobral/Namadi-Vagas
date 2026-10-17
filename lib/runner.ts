@@ -1,16 +1,43 @@
 import "server-only";
 import { randomUUID } from "node:crypto";
-import { claimSearch, deleteJobs, dueSearches, jobsForCleanup, getSearchById, insertJob, logRun, markRunEnd, setKv } from "./db";
+import { claimSearch, deleteJobs, dueSearches, jobsForCleanup, jobsNeedingDescription, getSearchById, insertJob, logRun, markFiltered, markRunEnd, setDescription, setKv } from "./db";
 import { googleSearch, isDemoMode } from "./serp";
 import { demoJobs } from "./demo";
 import { detectSource, looksLikeJob, normalizeUrl, parseTitle } from "./parse";
 import { buildGoogleQuery } from "./sources";
-import { parseSpec } from "./query";
-import { gupyFetch, linkedinFetch, type Found } from "./providers";
+import { evaluateJob, parseSpec, type QuerySpec } from "./query";
+import { gupyFetch, linkedinDescription, linkedinFetch, type Found } from "./providers";
 import { sendDigest } from "./notify";
 import type { Search } from "./types";
 
 const running = new Set<string>();
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * Regras "excluir também na descrição": o LinkedIn não entrega o texto no card, então lemos a descrição
+ * das vagas novas (com teto por rodada e pausa entre as chamadas). Vagas barradas vão para "Filtradas".
+ * Se o LinkedIn limitar o ritmo (429), paramos e o resto fica para a próxima rodada.
+ */
+async function enrichLinkedin(searchId: string, spec: QuerySpec) {
+  if (!spec.excludeBody?.length) return null;
+  const pending = await jobsNeedingDescription(searchId, 20);
+  let read = 0;
+  let barred = 0;
+  for (let i = 0; i < pending.length; i++) {
+    const j = pending[i];
+    try {
+      if (i > 0) await sleep(2000 + Math.random() * 1200);
+      const text = await linkedinDescription(j.url);
+      await setDescription(j.id, text ?? "");
+      read++;
+      const v = evaluateJob(spec, { title: j.title, text }, { trustAny: true });
+      if (v.verdict === "filtered" && v.reason) { await markFiltered(j.id, v.reason); barred++; }
+    } catch {
+      break; // 429: tenta de novo na próxima rodada
+    }
+  }
+  return pending.length ? `descrições ${read}/${pending.length}${barred ? `, ${barred} filtrada(s)` : ""}` : null;
+}
 
 type Batch = { name: string; jobs: Found[]; raw: number };
 
@@ -105,14 +132,20 @@ export async function runSearch(searchId: string): Promise<{ added: number; tota
           source: isDemoMode() ? "demo" : j.source,
           snippet: j.snippet,
           location: j.location ?? (s.location || null),
+          description: j.description ?? null,
+          filtered_reason: j.filteredReason ?? null,
         });
-        if (ok) added++;
+        if (ok && !j.filteredReason) added++;
       }
     }
     note = parts.join(" · ");
     // Só é falha da rodada se TODAS as fontes falharam; falha parcial aparece na nota.
     if (errors.length === settled.length) error = errors.join(" · ");
     else if (errors.length) { note += ` (${errors.join(" | ")})`.slice(0, 220); partial = true; }
+
+    // Regras "na descrição": lê o texto das vagas novas do LinkedIn e manda para "Filtradas" o que for barrado
+    const enr = await enrichLinkedin(s.id, spec).catch(() => null);
+    if (enr) note += ` · ${enr}`;
 
     // Resumo por e-mail: só se esta rodada trouxe vaga nova. Falha de e-mail não derruba a rodada.
     if (!error && added > 0 && s.notify_mode === "run") {

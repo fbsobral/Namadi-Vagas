@@ -10,6 +10,7 @@ import { renderDigest } from "@/lib/email";
 import { appUrl, mailConfigured, sendMail } from "@/lib/mailer";
 import { signUnsub } from "@/lib/unsub";
 import { findContacts } from "@/lib/contacts";
+import { linkedinDescription } from "@/lib/providers";
 import { PALETTE, SOURCES } from "@/lib/sources";
 import { isStage } from "@/lib/stages";
 import { cleanSpec, specToQuery, type QuerySpec } from "@/lib/query";
@@ -148,4 +149,25 @@ export async function sendTestEmail(searchId: string) {
   const mail = renderDigest({ searchName: search.name, color: search.color, jobs, appUrl: base, searchUrl: `${base}/dashboard?s=${search.id}`, unsubscribeUrl, test: true });
   await sendMail({ to, ...mail });
   return { to };
+}
+
+/** "Manter na lista": tira a vaga de "Filtradas" e impede que ela seja barrada de novo. */
+export async function keepFiltered(jobId: string) {
+  await q.keepJob(await uid(), jobId);
+  refresh();
+}
+
+/** Lê (uma vez) a descrição de uma vaga do LinkedIn quando o usuário a abre; fica guardada. */
+export async function ensureDescription(jobId: string) {
+  const userId = await uid();
+  const job = await q.getJob(userId, jobId);
+  if (!job) throw new Error("Vaga não encontrada");
+  if (job.description !== null) return job.description;
+  if (job.source !== "linkedin") return "";
+  const text = await linkedinDescription(job.url).catch((e) => {
+    throw new Error(/429/.test(String(e)) ? "O LinkedIn limitou as consultas. Tente abrir de novo em alguns minutos." : "Não consegui ler a descrição agora.");
+  });
+  await q.setDescription(jobId, text ?? "");
+  refresh();
+  return text ?? "";
 }

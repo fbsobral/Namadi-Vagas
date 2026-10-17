@@ -1,6 +1,6 @@
 import "server-only";
 import * as cheerio from "cheerio";
-import { driverTerms, hitsExclusion, matchSpec, specToBoolean, type QuerySpec } from "./query";
+import { driverTerms, evaluateJob, specToBoolean, type QuerySpec } from "./query";
 
 export type Found = {
   title: string;
@@ -9,6 +9,8 @@ export type Found = {
   snippet: string;
   location: string | null;
   source: "linkedin" | "gupy" | "web" | "demo";
+  description?: string | null; // texto da vaga, quando a fonte entrega
+  filteredReason?: string | null; // bateu com a busca, mas uma exclusão "na descrição" pegou
 };
 
 type Recency = "day" | "week" | "month" | "any";
@@ -69,8 +71,9 @@ export async function gupyFetch(spec: QuerySpec, location: string, recency: Rece
 
   const jobs: Found[] = [];
   for (const j of byId.values()) {
-    const text = `${j.name} ${j.careerPageName ?? ""} ${j.description ?? ""}`;
-    if (!matchSpec(spec, text)) continue;
+    const description = cheerio.load(`<div>${j.description ?? ""}</div>`)("div").text().replace(/\s+/g, " ").trim();
+    const v = evaluateJob(spec, { title: `${j.name} ${j.careerPageName ?? ""}`, text: description });
+    if (v.verdict === "drop") continue;
     if (j.publishedDate && new Date(j.publishedDate).getTime() < since) continue;
     if (locTokens.length) {
       const where = norm(`${j.city ?? ""} ${j.state ?? ""}`);
@@ -82,7 +85,9 @@ export async function gupyFetch(spec: QuerySpec, location: string, recency: Rece
       title: j.name.trim().slice(0, 160),
       company: (j.careerPageName ?? "Empresa").trim().slice(0, 80),
       url: j.jobUrl,
-      snippet: cheerio.load(`<p>${j.description ?? ""}</p>`)("p").text().replace(/\s+/g, " ").trim().slice(0, 300),
+      snippet: description.slice(0, 300),
+      description: description.slice(0, 4000),
+      filteredReason: v.verdict === "filtered" ? v.reason : null,
       location: [place, wp].filter(Boolean).join(" · ") || null,
       source: "gupy",
     });
@@ -137,7 +142,7 @@ export async function linkedinFetch(spec: QuerySpec, location: string, recency: 
       if (!href || !title) return;
       got++;
       raw++;
-      if (hitsExclusion(spec, title)) return;
+      if (evaluateJob(spec, { title }, { trustAny: true }).verdict === "drop") return;
       let url = href;
       try {
         const u = new URL(href);
@@ -157,4 +162,27 @@ export async function linkedinFetch(spec: QuerySpec, location: string, recency: 
     await sleep(jitter(1800, 3200));
   }
   return { jobs: [...out.values()], raw };
+}
+
+/**
+ * Descrição completa de uma vaga do LinkedIn (página de detalhe pública). Devolve null se a vaga sumiu;
+ * lança erro com "429" quando o LinkedIn limita o ritmo, para o chamador parar e tentar na próxima rodada.
+ */
+export async function linkedinDescription(url: string): Promise<string | null> {
+  const id = url.match(/(\d{8,})\/?(?:[?#].*)?$/)?.[1];
+  if (!id) return null;
+  const res = await fetch(`https://www.linkedin.com/jobs-guest/jobs/api/jobPosting/${id}`, {
+    headers: { "User-Agent": UA, "Accept-Language": "pt-BR,pt;q=0.9,en;q=0.5" },
+    signal: AbortSignal.timeout(20000),
+    cache: "no-store",
+  });
+  if (res.status === 429 || res.status === 999) throw new Error("LinkedIn limitou as consultas (429)");
+  if (!res.ok) return null;
+  const $ = cheerio.load(await res.text());
+  const el = $(".show-more-less-html__markup").first();
+  el.find("br").replaceWith("\n");
+  el.find("li").each((_, li) => { $(li).prepend("• "); $(li).append("\n"); });
+  el.find("p, div, ul").each((_, n) => { $(n).append("\n"); });
+  const text = el.text().replace(/[ \t]+/g, " ").replace(/\n\s*\n\s*\n+/g, "\n\n").trim();
+  return text ? text.slice(0, 4000) : null;
 }

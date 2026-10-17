@@ -52,6 +52,10 @@ UPDATE searches SET sources='["linkedin","gupy","web"]' WHERE sources='["web"]';
 
 ALTER TABLE jobs ADD COLUMN IF NOT EXISTS contacts_note TEXT;
 ALTER TABLE jobs ADD COLUMN IF NOT EXISTS notified_at BIGINT;
+ALTER TABLE jobs ADD COLUMN IF NOT EXISTS description TEXT;
+ALTER TABLE jobs ADD COLUMN IF NOT EXISTS filtered INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE jobs ADD COLUMN IF NOT EXISTS filtered_reason TEXT;
+ALTER TABLE jobs ADD COLUMN IF NOT EXISTS filter_keep INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE jobs ADD COLUMN IF NOT EXISTS stage TEXT;
 ALTER TABLE jobs ADD COLUMN IF NOT EXISTS stage_pos INTEGER NOT NULL DEFAULT 0;
 UPDATE jobs SET stage='todo' WHERE favorite=1 AND stage IS NULL;
@@ -151,9 +155,9 @@ async function run(q: string, ...p: P[]) {
 export const listSearches = (userId: string) =>
   all<Search>(
     `SELECT s.*,
-       (SELECT COUNT(*) FROM jobs j WHERE j.search_id = s.id) AS total,
-       (SELECT COUNT(*) FROM jobs j WHERE j.search_id = s.id AND j.seen = 0) AS unseen,
-       (SELECT COUNT(*) FROM jobs j WHERE j.search_id = s.id AND j.favorite = 1) AS favs
+       (SELECT COUNT(*) FROM jobs j WHERE j.search_id = s.id AND j.filtered = 0) AS total,
+       (SELECT COUNT(*) FROM jobs j WHERE j.search_id = s.id AND j.filtered = 0 AND j.seen = 0) AS unseen,
+       (SELECT COUNT(*) FROM jobs j WHERE j.search_id = s.id AND j.filtered = 0 AND j.favorite = 1) AS favs
      FROM searches s WHERE s.user_id = ? ORDER BY s.created_at ASC`,
     userId,
   );
@@ -254,7 +258,7 @@ export async function claimUnnotified(searchId: string, since: number, limit = 2
   await ready();
   const r = await pool().query(
     `UPDATE jobs SET notified_at=$1 WHERE id IN (
-       SELECT id FROM jobs WHERE search_id=$2 AND notified_at IS NULL AND found_at >= $3 ORDER BY found_at DESC LIMIT $4
+       SELECT id FROM jobs WHERE search_id=$2 AND notified_at IS NULL AND filtered=0 AND found_at >= $3 ORDER BY found_at DESC LIMIT $4
      ) RETURNING id, title, company, location, source, url, found_at`,
     [Date.now(), searchId, since, limit],
   );
@@ -275,12 +279,13 @@ export const countUnnotified = async (searchId: string, since: number) =>
 
 /* ---------- jobs ---------- */
 
-export type JobFilter = "all" | "new" | "fav" | "board";
+export type JobFilter = "all" | "new" | "fav" | "board" | "filtered";
 
 export function listJobs(userId: string, opts: { searchId?: string | null; filter: JobFilter; limit?: number }) {
   const where = ["j.user_id = ?"];
   const params: P[] = [userId];
   if (opts.searchId) { where.push("j.search_id = ?"); params.push(opts.searchId); }
+  where.push(opts.filter === "filtered" ? "j.filtered = 1" : "j.filtered = 0");
   if (opts.filter === "new") where.push("j.seen = 0");
   if (opts.filter === "fav") where.push("j.favorite = 1");
   if (opts.filter === "board") where.push("j.stage IS NOT NULL");
@@ -297,7 +302,7 @@ export async function jobCounts(userId: string) {
     `SELECT COUNT(*) AS total,
             COALESCE(SUM(CASE WHEN seen=0 THEN 1 ELSE 0 END),0) AS unseen,
             COALESCE(SUM(CASE WHEN favorite=1 THEN 1 ELSE 0 END),0) AS favs
-     FROM jobs WHERE user_id=?`,
+     FROM jobs WHERE user_id=? AND filtered=0`,
     userId,
   ))!;
 }
@@ -311,11 +316,12 @@ export const getJob = (userId: string, id: string) =>
 
 export const getJobById = (id: string) => get<Job>("SELECT * FROM jobs WHERE id=?", id);
 
-export async function insertJob(j: Pick<Job, "id" | "user_id" | "search_id" | "title" | "company" | "url" | "source" | "snippet" | "location">) {
+export async function insertJob(j: Pick<Job, "id" | "user_id" | "search_id" | "title" | "company" | "url" | "source" | "snippet" | "location"> & { description?: string | null; filtered_reason?: string | null }) {
   const r = await run(
-    `INSERT INTO jobs (id,user_id,search_id,title,company,url,source,snippet,location,found_at)
-     VALUES (?,?,?,?,?,?,?,?,?,?) ON CONFLICT (search_id, url) DO NOTHING`,
+    `INSERT INTO jobs (id,user_id,search_id,title,company,url,source,snippet,location,found_at,description,filtered,filtered_reason)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT (search_id, url) DO NOTHING`,
     j.id, j.user_id, j.search_id, j.title, j.company, j.url, j.source, j.snippet, j.location, Date.now(),
+    j.description ?? null, j.filtered_reason ? 1 : 0, j.filtered_reason ?? null,
   );
   return (r.rowCount ?? 0) > 0;
 }
@@ -355,6 +361,31 @@ export async function moveJob(userId: string, id: string, stage: string, index: 
   } finally {
     c.release();
   }
+}
+
+/* ---------- descrição e filtradas ---------- */
+
+export const setDescription = (id: string, text: string) => run("UPDATE jobs SET description=? WHERE id=?", text, id);
+
+/** Vagas do LinkedIn ainda sem descrição lida (as mais novas primeiro), para checar regras "na descrição". */
+export const jobsNeedingDescription = (searchId: string, limit: number) =>
+  all<Pick<Job, "id" | "title" | "url">>(
+    "SELECT id, title, url FROM jobs WHERE search_id=? AND source='linkedin' AND description IS NULL AND filter_keep=0 AND favorite=0 ORDER BY found_at DESC LIMIT " + Number(limit),
+    searchId,
+  );
+
+export const markFiltered = (id: string, reason: string) => run("UPDATE jobs SET filtered=1, filtered_reason=? WHERE id=? AND filter_keep=0", reason, id);
+
+/** "Manter na lista": desfaz o filtro e impede que ele volte a barrar essa vaga. */
+export const keepJob = (userId: string, id: string) =>
+  run("UPDATE jobs SET filtered=0, filtered_reason=NULL, filter_keep=1 WHERE id=? AND user_id=?", id, userId);
+
+export async function filteredCount(userId: string, searchId: string | null) {
+  const r = await get<{ n: number }>(
+    searchId ? "SELECT COUNT(*) AS n FROM jobs WHERE user_id=? AND filtered=1 AND search_id=?" : "SELECT COUNT(*) AS n FROM jobs WHERE user_id=? AND filtered=1",
+    ...(searchId ? [userId, searchId] : [userId]),
+  );
+  return r?.n ?? 0;
 }
 
 export const jobsForCleanup = (searchId: string) =>

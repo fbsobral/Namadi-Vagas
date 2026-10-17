@@ -4,10 +4,10 @@ import { currentUser } from "@clerk/nextjs/server";
 import { getUserId } from "@/lib/auth";
 import { UserButton } from "@clerk/nextjs";
 import { AlertTriangle, Columns3, LayoutList, Radar as RadarIcon, Star } from "lucide-react";
-import { getJob, getKv, jobCounts, listContacts, listJobs, listRuns, listSearches, type JobFilter } from "@/lib/db";
+import { filteredCount, getJob, getKv, jobCounts, listContacts, listJobs, listRuns, listSearches, type JobFilter } from "@/lib/db";
 import { isDemoMode } from "@/lib/serp";
 import { freqLabel, sourceLabel } from "@/lib/sources";
-import { parseSpec, specToBoolean } from "@/lib/query";
+import { includeTerms, parseSpec, specToBoolean } from "@/lib/query";
 import { isFresh, timeAgo } from "@/lib/format";
 import { Sidebar } from "@/components/sidebar";
 import { SearchToolbar } from "@/components/search-toolbar";
@@ -29,12 +29,13 @@ export default async function Dashboard({ searchParams }: PageProps<"/dashboard"
   const [searches, counts, user] = await Promise.all([listSearches(userId), jobCounts(userId), currentUser()]);
   const current = searches.find((s) => s.id === one("s")) ?? null;
   const view = one("v") === "board" ? "board" : "list";
-  const filter: JobFilter = view === "board" ? "board" : one("f") === "new" ? "new" : one("f") === "fav" ? "fav" : "all";
-  const jobs = await listJobs(userId, { searchId: current?.id, filter });
+  const filter: JobFilter = view === "board" ? "board" : one("f") === "new" ? "new" : one("f") === "fav" ? "fav" : one("f") === "filtered" ? "filtered" : "all";
+  const [jobs, nFiltered] = await Promise.all([listJobs(userId, { searchId: current?.id, filter }), filteredCount(userId, current?.id ?? null)]);
   const [beat, runs] = await Promise.all([getKv("scheduler_heartbeat"), current ? listRuns(current.id) : Promise.resolve([])]);
   const jobId = one("job");
   const drawerJob = jobId ? await getJob(userId, jobId) : null;
   const contacts = drawerJob ? await listContacts(drawerJob.id) : [];
+  const drawerSearch = drawerJob ? searches.find((s) => s.id === drawerJob.search_id) ?? null : null;
 
   const base = (extra: Record<string, string | null> = {}) => {
     const p = new URLSearchParams();
@@ -51,7 +52,7 @@ export default async function Dashboard({ searchParams }: PageProps<"/dashboard"
     const p = new URLSearchParams();
     if (current) p.set("s", current.id);
     if (v === "board") p.set("v", "board");
-    else if (one("f") === "new" || one("f") === "fav") p.set("f", one("f")!);
+    else if (one("f") === "new" || one("f") === "fav" || one("f") === "filtered") p.set("f", one("f")!);
     const q = p.toString();
     return `/dashboard${q ? `?${q}` : ""}`;
   };
@@ -106,7 +107,7 @@ export default async function Dashboard({ searchParams }: PageProps<"/dashboard"
           <div className="mt-6 flex items-end justify-between gap-2 border-b border-line sm:mt-8">
             {view === "list" ? (
               <div className="-mb-px flex min-w-0 gap-0.5 overflow-x-auto [scrollbar-width:none] sm:gap-1 [&::-webkit-scrollbar]:hidden" role="tablist">
-                {([["all", "Todas"], ["new", "Novas"], ["fav", "Favoritas"]] as const).map(([k, l]) => (
+                {([["all", "Todas"], ["new", "Novas"], ["fav", "Favoritas"], ...(nFiltered > 0 || filter === "filtered" ? [["filtered", `Filtradas · ${nFiltered}`]] : [])] as [string, string][]).map(([k, l]) => (
                   <Link key={k} href={base({ f: k === "all" ? null : k })} role="tab" aria-selected={filter === k}
                     className={`-mb-px shrink-0 border-b-2 px-3 py-3 text-sm font-medium transition sm:px-4 ${filter === k ? "border-accent text-ink" : "border-transparent text-ink-3 hover:text-ink"}`}>{l}</Link>
                 ))}
@@ -135,7 +136,7 @@ export default async function Dashboard({ searchParams }: PageProps<"/dashboard"
         </div>
       </main>
 
-      {drawerJob && <JobDrawer job={drawerJob} contacts={contacts} closeHref={base()} />}
+      {drawerJob && <JobDrawer job={drawerJob} contacts={contacts} closeHref={base()} terms={drawerSearch ? includeTerms(parseSpec(drawerSearch.query_spec, drawerSearch.query)) : []} />}
     </div>
   );
 }

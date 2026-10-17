@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ArrowUpRight, MapPin } from "lucide-react";
 import { FavoriteButton } from "./favorite-button";
 import { Avatar } from "./avatar";
+import { KeepButton } from "./keep-button";
 import { timeAgo } from "@/lib/format";
 import { sourceLabel } from "@/lib/sources";
 import type { Job } from "@/lib/types";
@@ -33,12 +34,14 @@ export function JobCard({ job, href, showSearch, index }: { job: Job; href: stri
                 </span>
               )}
               <span>encontrada {timeAgo(job.found_at)}</span>
+              {job.filtered === 1 && job.filtered_reason && <span className="text-accent">filtrada: {job.filtered_reason}</span>}
               {job.favorite === 1 && job.contacts_status === "pending" && <span className="text-accent">buscando pessoas…</span>}
               {job.favorite === 1 && job.contacts_status === "done" && <span className="text-ok">contatos prontos</span>}
             </div>
           </div>
         </div>
       </Link>
+      {job.filtered === 1 && <div className="border-t border-line px-4 py-3 sm:px-5"><KeepButton jobId={job.id} /></div>}
       <div className="absolute top-2 right-2 flex flex-col items-center gap-0.5 sm:top-4 sm:right-4 sm:gap-1">
         <FavoriteButton jobId={job.id} favorite={job.favorite === 1} />
         <a href={job.url} target="_blank" rel="noopener noreferrer" aria-label="Abrir vaga em nova aba" className="grid size-10 place-items-center rounded-full text-ink-3 transition hover:bg-surface-2 hover:text-ink focus-visible:opacity-100 lg:opacity-0 lg:group-hover:opacity-100">

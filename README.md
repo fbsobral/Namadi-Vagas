@@ -38,3 +38,9 @@ Precisa de um Postgres acessível em `DATABASE_URL`. As tabelas são criadas aut
    - `NEXT_PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL=/dashboard`, `NEXT_PUBLIC_CLERK_SIGN_UP_FALLBACK_REDIRECT_URL=/dashboard`
 4. **Domínio**: aponte o DNS para a VPS e configure o domínio no app (o Coolify emite o HTTPS). No Clerk, use as chaves de **produção** e adicione o domínio.
 5. **Deploy**. Como o container fica sempre ligado, o agendador interno já cuida do robô — não precisa de cron externo. Pode manter 1 réplica (recomendado: o Chromium consome memória); com mais, a trava no banco evita rodadas duplicadas.
+
+## Busca na descrição da vaga
+Cada grupo de palavras escolhe onde procurar: **título e descrição** (padrão) ou **só no título**. Há duas listas de exclusão: *não pode conter no título* e *excluir também se estiver na descrição*. Vagas barradas pela descrição vão para a aba **Filtradas** (com o motivo e o botão "Manter na lista"), nada é apagado. A Gupy entrega a descrição na própria lista; no LinkedIn o robô lê a página da vaga (até 20 por rodada, com pausa entre as leituras) e guarda o texto.
+
+## Resumo por e-mail (Resend)
+Defina `RESEND_API_KEY`, `MAIL_FROM` (domínio verificado no Resend) e `APP_URL`. Em cada busca: desligado, a cada rodada com vagas novas, ou resumo diário às 8h (horário de São Paulo). Há um botão de e-mail de teste no editor da busca e um link de "parar de receber" em cada e-mail.

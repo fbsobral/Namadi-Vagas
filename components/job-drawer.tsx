@@ -8,6 +8,7 @@ import { retryContacts, seeJob } from "@/app/actions";
 import { AutoRefresh } from "./auto-refresh";
 import { Avatar } from "./avatar";
 import { FavoriteButton } from "./favorite-button";
+import { JobDescription } from "./job-description";
 import { timeAgo } from "@/lib/format";
 import { sourceLabel } from "@/lib/sources";
 import type { Contact, ContactRole, Job } from "@/lib/types";
@@ -25,7 +26,7 @@ function icebreaker(c: Contact, job: Job) {
   return `Olá ${first}! Vi que você atua na ${job.company} e estou considerando a vaga de ${job.title}. Posso te fazer duas perguntas sobre como é o dia a dia por aí?`;
 }
 
-export function JobDrawer({ job, contacts, closeHref }: { job: Job; contacts: Contact[]; closeHref: string }) {
+export function JobDrawer({ job, contacts, closeHref, terms }: { job: Job; contacts: Contact[]; closeHref: string; terms: string[] }) {
   const router = useRouter();
 
   useEffect(() => {
@@ -62,7 +63,8 @@ export function JobDrawer({ job, contacts, closeHref }: { job: Job; contacts: Co
             <span className="inline-flex items-center gap-1.5 rounded-full bg-surface-2 px-2.5 py-1 text-ink-2"><span className="size-1.5 rounded-full" style={{ background: job.search_color }} />{job.search_name}</span>
             <span>encontrada {timeAgo(job.found_at)}</span>
           </div>
-          {job.snippet && <p className="mt-5 rounded-2xl border border-line bg-surface p-4 text-[15px] leading-relaxed text-ink-2">{job.snippet}</p>}
+          {job.filtered === 1 && job.filtered_reason && <p className="mt-5 rounded-xl bg-accent-soft px-4 py-3 text-sm text-accent">Barrada pelo filtro: {job.filtered_reason}.</p>}
+          <JobDescription key={job.id} jobId={job.id} source={job.source} description={job.description} snippet={job.snippet} terms={terms} />
           <div className="mt-5 flex flex-wrap gap-2">
             <a href={job.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 rounded-full bg-ink px-6 py-2.5 font-medium text-bg transition hover:opacity-85">Abrir vaga <ArrowUpRight className="size-4" /></a>
             <FavoriteButton jobId={job.id} favorite={fav} label />
