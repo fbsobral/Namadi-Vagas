@@ -15,6 +15,10 @@ export type Search = {
   last_status: "idle" | "running" | "ok" | "error";
   last_error: string | null;
   created_at: number;
+  notify_mode: "off" | "run" | "daily";
+  notify_email: string | null;
+  notify_since: number | null;
+  notify_last_at: number | null;
   // agregados
   total?: number;
   unseen?: number;

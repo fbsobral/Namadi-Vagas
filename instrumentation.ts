@@ -13,6 +13,7 @@ export async function register() {
     return;
   }
   const { runDue, beat } = mod;
+  const { runDigests } = await import("./lib/notify");
   let busy = false;
   const tick = async () => {
     if (busy) return;
@@ -20,6 +21,8 @@ export async function register() {
     try {
       await beat();
       const r = await runDue();
+      const d = await runDigests();
+      if (d.length) console.log("[e-mail] resumos diários", d.map((x) => `${x.id.slice(0, 6)}:${x.error ? "erro" : x.sent}`).join(" "));
       if (r.length) console.log(`[robô] ${r.length} busca(s) executada(s)`, r.map((x) => `${x.id.slice(0, 6)}+${x.added}`).join(" "));
     } catch (e) {
       console.error("[robô] falha", e);

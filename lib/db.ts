@@ -51,6 +51,7 @@ CREATE INDEX IF NOT EXISTS idx_jobs_search ON jobs(search_id, found_at DESC);
 UPDATE searches SET sources='["linkedin","gupy","web"]' WHERE sources='["web"]';
 
 ALTER TABLE jobs ADD COLUMN IF NOT EXISTS contacts_note TEXT;
+ALTER TABLE jobs ADD COLUMN IF NOT EXISTS notified_at BIGINT;
 ALTER TABLE jobs ADD COLUMN IF NOT EXISTS stage TEXT;
 ALTER TABLE jobs ADD COLUMN IF NOT EXISTS stage_pos INTEGER NOT NULL DEFAULT 0;
 UPDATE jobs SET stage='todo' WHERE favorite=1 AND stage IS NULL;
@@ -71,6 +72,10 @@ CREATE TABLE IF NOT EXISTS contacts (
 
 ALTER TABLE searches ADD COLUMN IF NOT EXISTS locked_at BIGINT;
 ALTER TABLE searches ADD COLUMN IF NOT EXISTS query_spec TEXT;
+ALTER TABLE searches ADD COLUMN IF NOT EXISTS notify_mode TEXT NOT NULL DEFAULT 'off';
+ALTER TABLE searches ADD COLUMN IF NOT EXISTS notify_email TEXT;
+ALTER TABLE searches ADD COLUMN IF NOT EXISTS notify_since BIGINT;
+ALTER TABLE searches ADD COLUMN IF NOT EXISTS notify_last_at BIGINT;
 
 CREATE TABLE IF NOT EXISTS kv (
   key TEXT PRIMARY KEY,
@@ -158,12 +163,13 @@ export const getSearch = (userId: string, id: string) =>
 
 export const getSearchById = (id: string) => get<Search>("SELECT * FROM searches WHERE id = ?", id);
 
-export async function insertSearch(s: Omit<Search, "last_run_at" | "last_status" | "last_error" | "created_at" | "next_run_at">) {
+export async function insertSearch(s: Omit<Search, "last_run_at" | "last_status" | "last_error" | "created_at" | "next_run_at" | "notify_since" | "notify_last_at">) {
   const now = Date.now();
   await run(
-    `INSERT INTO searches (id,user_id,name,query,query_spec,location,sources,recency,freq_minutes,active,color,next_run_at,created_at)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+    `INSERT INTO searches (id,user_id,name,query,query_spec,location,sources,recency,freq_minutes,active,color,next_run_at,created_at,notify_mode,notify_email,notify_since)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
     s.id, s.user_id, s.name, s.query, s.query_spec, s.location, s.sources, s.recency, s.freq_minutes, s.active, s.color, now, now,
+    s.notify_mode, s.notify_email, s.notify_mode === "off" ? null : now,
   );
 }
 
@@ -228,6 +234,44 @@ export const getKv = (key: string) => get<{ value: string; updated_at: number }>
 export const logRun = (searchId: string, startedAt: number, newCount: number, total: number, error: string | null, raw = 0, note: string | null = null) =>
   run("INSERT INTO runs (search_id,started_at,finished_at,new_count,total_count,raw_count,note,error) VALUES (?,?,?,?,?,?,?,?)",
     searchId, startedAt, Date.now(), newCount, total, raw, note, error);
+
+/* ---------- e-mail (resumo das vagas novas) ---------- */
+
+export type DigestJob = Pick<Job, "id" | "title" | "company" | "location" | "source" | "url" | "found_at">;
+
+/** Liga/desliga o resumo. Ao ligar, só vagas encontradas daqui para frente entram (sem despejar o histórico). */
+export async function setNotify(userId: string, id: string, mode: Search["notify_mode"], email: string | null) {
+  const cur = await getSearch(userId, id);
+  if (!cur) return;
+  const since = mode === "off" ? cur.notify_since : cur.notify_mode === "off" ? Date.now() : cur.notify_since;
+  await run("UPDATE searches SET notify_mode=?, notify_email=?, notify_since=? WHERE id=? AND user_id=?", mode, mode === "off" ? cur.notify_email : email, since, id, userId);
+}
+
+export const disableNotify = (id: string) => run("UPDATE searches SET notify_mode='off' WHERE id=?", id);
+
+/** Reserva (atômico) as vagas ainda não avisadas: duas execuções nunca mandam a mesma vaga duas vezes. */
+export async function claimUnnotified(searchId: string, since: number, limit = 200) {
+  await ready();
+  const r = await pool().query(
+    `UPDATE jobs SET notified_at=$1 WHERE id IN (
+       SELECT id FROM jobs WHERE search_id=$2 AND notified_at IS NULL AND found_at >= $3 ORDER BY found_at DESC LIMIT $4
+     ) RETURNING id, title, company, location, source, url, found_at`,
+    [Date.now(), searchId, since, limit],
+  );
+  return (r.rows as DigestJob[]).sort((a, b) => b.found_at - a.found_at);
+}
+
+export const unclaimJobs = async (ids: string[]) => {
+  if (ids.length) await run(`UPDATE jobs SET notified_at=NULL WHERE id IN (${ids.map(() => "?").join(",")})`, ...ids);
+};
+
+export const dueDigests = (boundary: number) =>
+  all<Search>("SELECT * FROM searches WHERE notify_mode='daily' AND notify_email IS NOT NULL AND (notify_last_at IS NULL OR notify_last_at < ?)", boundary);
+
+export const touchNotifyLast = (id: string) => run("UPDATE searches SET notify_last_at=? WHERE id=?", Date.now(), id);
+
+export const countUnnotified = async (searchId: string, since: number) =>
+  (await get<{ n: number }>("SELECT COUNT(*) AS n FROM jobs WHERE search_id=? AND notified_at IS NULL AND found_at >= ?", searchId, since))?.n ?? 0;
 
 /* ---------- jobs ---------- */
 

@@ -8,6 +8,7 @@ import { createSearch, editSearch, type SearchInput } from "@/app/actions";
 import { buildGoogleQuery, FREQUENCIES, RECENCY, SOURCES } from "@/lib/sources";
 import { emptySpec, hasTerms, parseSpec, specToBoolean, specToQuery } from "@/lib/query";
 import { QueryBuilder } from "./query-builder";
+import { EmailSettings } from "./email-settings";
 import type { Search } from "@/lib/types";
 
 export function SearchDialog({ open, onClose, initial }: { open: boolean; onClose: () => void; initial?: Search | null }) {
@@ -21,7 +22,7 @@ function DialogBody({ onClose, initial }: { onClose: () => void; initial?: Searc
   const [error, setError] = useState<string | null>(null);
   const [f, setF] = useState<SearchInput>(() =>
     initial
-      ? { name: initial.name, spec: parseSpec(initial.query_spec, initial.query), location: initial.location, sources: JSON.parse(initial.sources), recency: initial.recency, freq_minutes: initial.freq_minutes }
+      ? { name: initial.name, spec: parseSpec(initial.query_spec, initial.query), location: initial.location, sources: JSON.parse(initial.sources), recency: initial.recency, freq_minutes: initial.freq_minutes, notify_mode: initial.notify_mode ?? "off" }
       : blank(),
   );
 
@@ -115,6 +116,8 @@ function DialogBody({ onClose, initial }: { onClose: () => void; initial?: Searc
           </div>
         </div>
 
+        <EmailSettings mode={f.notify_mode} onChange={(m) => set("notify_mode", m)} searchId={initial?.id} />
+
         <div className="mt-6 space-y-3 rounded-2xl bg-surface-2 p-4">
           <p className="text-xs font-medium tracking-wider text-ink-3 uppercase">O que o robô vai buscar</p>
           {f.sources.includes("linkedin") && <Line label="LinkedIn" text={boolQ} />}
@@ -161,5 +164,5 @@ function Segment({ label, value, onChange, options }: { label: string; value: st
 }
 
 function blank(): SearchInput {
-  return { name: "", spec: emptySpec(), location: "", sources: ["linkedin", "gupy"], recency: "week", freq_minutes: 360 };
+  return { name: "", spec: emptySpec(), location: "", sources: ["linkedin", "gupy"], recency: "week", freq_minutes: 360, notify_mode: "off" };
 }

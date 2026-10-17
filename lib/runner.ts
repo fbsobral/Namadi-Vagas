@@ -7,6 +7,7 @@ import { detectSource, looksLikeJob, normalizeUrl, parseTitle } from "./parse";
 import { buildGoogleQuery } from "./sources";
 import { parseSpec } from "./query";
 import { gupyFetch, linkedinFetch, type Found } from "./providers";
+import { sendDigest } from "./notify";
 import type { Search } from "./types";
 
 const running = new Set<string>();
@@ -112,6 +113,13 @@ export async function runSearch(searchId: string): Promise<{ added: number; tota
     // Só é falha da rodada se TODAS as fontes falharam; falha parcial aparece na nota.
     if (errors.length === settled.length) error = errors.join(" · ");
     else if (errors.length) { note += ` (${errors.join(" | ")})`.slice(0, 220); partial = true; }
+
+    // Resumo por e-mail: só se esta rodada trouxe vaga nova. Falha de e-mail não derruba a rodada.
+    if (!error && added > 0 && s.notify_mode === "run") {
+      const m = await sendDigest(s);
+      if (m.sent) note += ` · ✉ ${m.sent} no e-mail`;
+      else if (m.error) note += ` · ✉ falhou: ${m.error}`;
+    }
   } catch (e) {
     error = e instanceof Error ? e.message : String(e);
   } finally {

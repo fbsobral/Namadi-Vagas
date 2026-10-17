@@ -3,9 +3,12 @@
 import { randomUUID } from "node:crypto";
 import { after } from "next/server";
 import { revalidatePath } from "next/cache";
-import { getUserId } from "@/lib/auth";
+import { getUserId, getViewerEmail } from "@/lib/auth";
 import * as q from "@/lib/db";
 import { runSearch } from "@/lib/runner";
+import { renderDigest } from "@/lib/email";
+import { appUrl, mailConfigured, sendMail } from "@/lib/mailer";
+import { signUnsub } from "@/lib/unsub";
 import { findContacts } from "@/lib/contacts";
 import { PALETTE, SOURCES } from "@/lib/sources";
 import { isStage } from "@/lib/stages";
@@ -18,6 +21,7 @@ export type SearchInput = {
   sources: string[];
   recency: "day" | "week" | "month" | "any";
   freq_minutes: number;
+  notify_mode: "off" | "run" | "daily";
 };
 
 async function uid() {
@@ -40,6 +44,7 @@ function sanitize(i: SearchInput) {
     sources: JSON.stringify(sources.length ? sources : ["web"]),
     recency: (["day", "week", "month", "any"].includes(i.recency) ? i.recency : "week") as SearchInput["recency"],
     freq_minutes: Math.min(Math.max(Math.round(i.freq_minutes) || 360, 15), 60 * 24 * 30),
+    notify_mode: (["off", "run", "daily"].includes(i.notify_mode) ? i.notify_mode : "off") as SearchInput["notify_mode"],
   };
 }
 
@@ -49,7 +54,10 @@ export async function createSearch(input: SearchInput) {
   const userId = await uid();
   const id = randomUUID();
   const count = (await q.listSearches(userId)).length;
-  await q.insertSearch({ id, user_id: userId, active: 1, color: PALETTE[count % PALETTE.length], ...sanitize(input) });
+  const data = sanitize(input);
+  const email = data.notify_mode === "off" ? null : await getViewerEmail();
+  if (data.notify_mode !== "off" && !email) throw new Error("Seu e-mail principal não está verificado, então não dá para ligar o resumo por e-mail.");
+  await q.insertSearch({ id, user_id: userId, active: 1, color: PALETTE[count % PALETTE.length], notify_email: email, ...data });
   after(() => runSearch(id)); // já traz as primeiras vagas
   refresh();
   return id;
@@ -57,7 +65,11 @@ export async function createSearch(input: SearchInput) {
 
 export async function editSearch(id: string, input: SearchInput) {
   const userId = await uid();
-  await q.updateSearch(userId, id, sanitize(input));
+  const { notify_mode, ...data } = sanitize(input);
+  const email = notify_mode === "off" ? null : await getViewerEmail();
+  if (notify_mode !== "off" && !email) throw new Error("Seu e-mail principal não está verificado, então não dá para ligar o resumo por e-mail.");
+  await q.updateSearch(userId, id, data);
+  await q.setNotify(userId, id, notify_mode, email);
   refresh();
 }
 
@@ -110,4 +122,30 @@ export async function moveJobStage(jobId: string, stage: string, index: number) 
   if (!isStage(stage)) throw new Error("Etapa inválida");
   await q.moveJob(await uid(), jobId, stage, index);
   refresh();
+}
+
+/** Para o formulário: e-mail que receberá o resumo e se o servidor já sabe enviar. */
+export async function getMailInfo() {
+  await uid();
+  return { email: await getViewerEmail(), configured: mailConfigured() };
+}
+
+/** Envia um e-mail de teste com as vagas mais recentes da busca (ou exemplos, se ainda não houver). */
+export async function sendTestEmail(searchId: string) {
+  const userId = await uid();
+  const search = await q.getSearch(userId, searchId);
+  if (!search) throw new Error("Busca não encontrada");
+  if (!mailConfigured()) throw new Error("O envio de e-mail ainda não está configurado no servidor (RESEND_API_KEY e MAIL_FROM).");
+  const to = await getViewerEmail();
+  if (!to) throw new Error("Seu e-mail principal não está verificado.");
+
+  const real = await q.listJobs(userId, { searchId, filter: "all", limit: 3 });
+  const jobs = real.length
+    ? real.map((j) => ({ id: j.id, title: j.title, company: j.company, location: j.location, source: j.source, url: j.url, found_at: j.found_at }))
+    : [{ id: "x", title: "Vaga de exemplo", company: "Empresa Exemplo", location: "São Paulo, SP", source: "linkedin", url: appUrl(), found_at: Date.now() }];
+  const base = appUrl();
+  const unsubscribeUrl = `${base}/api/unsubscribe?s=${search.id}&t=${signUnsub(search.id)}`;
+  const mail = renderDigest({ searchName: search.name, color: search.color, jobs, appUrl: base, searchUrl: `${base}/dashboard?s=${search.id}`, unsubscribeUrl, test: true });
+  await sendMail({ to, ...mail });
+  return { to };
 }
