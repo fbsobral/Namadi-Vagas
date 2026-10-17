@@ -83,12 +83,13 @@ export function JobDrawer({ job, contacts, closeHref }: { job: Job; contacts: Co
             {fav && pending && <Skeletons />}
             {fav && job.contacts_status === "error" && <Empty title="Não deu para buscar agora" body={job.contacts_error ?? "Tente novamente em instantes."} />}
             {fav && job.contacts_status === "done" && contacts.length === 0 && (
-              <Empty title="Nenhum perfil público encontrado" body="O Google não devolveu perfis ligados a essa empresa. Tente a busca manual." action={
+              <Empty title="Nenhum perfil do RH ou da área encontrado" body={job.contacts_note ?? "O Google não devolveu perfis ligados a essa empresa. Tente a busca manual."} action={
                 <a className="mt-3 inline-block text-sm font-medium text-accent underline underline-offset-4" target="_blank" rel="noopener noreferrer"
                   href={`https://www.google.com/search?q=${encodeURIComponent(`site:linkedin.com/in "${job.company}"`)}`}>Buscar no Google →</a>} />
             )}
             {fav && job.contacts_status === "done" && contacts.length > 0 && (
               <div className="space-y-7">
+                {job.contacts_note && <p className="-mt-1 text-xs text-ink-3">{job.contacts_note}</p>}
                 {(["recruiter", "leader", "peer"] as ContactRole[]).map((r) => {
                   const list = contacts.filter((c) => c.role === r);
                   if (!list.length) return null;

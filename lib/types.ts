@@ -39,6 +39,7 @@ export type Job = {
   stage_pos: number;
   contacts_status: "idle" | "pending" | "done" | "error";
   contacts_error: string | null;
+  contacts_note: string | null;
   search_name?: string;
   search_color?: string;
 };

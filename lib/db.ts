@@ -50,6 +50,7 @@ CREATE INDEX IF NOT EXISTS idx_jobs_search ON jobs(search_id, found_at DESC);
 -- buscas antigas só com Google passam a usar também os leitores diretos de LinkedIn e Gupy
 UPDATE searches SET sources='["linkedin","gupy","web"]' WHERE sources='["web"]';
 
+ALTER TABLE jobs ADD COLUMN IF NOT EXISTS contacts_note TEXT;
 ALTER TABLE jobs ADD COLUMN IF NOT EXISTS stage TEXT;
 ALTER TABLE jobs ADD COLUMN IF NOT EXISTS stage_pos INTEGER NOT NULL DEFAULT 0;
 UPDATE jobs SET stage='todo' WHERE favorite=1 AND stage IS NULL;
@@ -325,8 +326,8 @@ export const markAllSeen = (userId: string, searchId: string | null) =>
     ? run("UPDATE jobs SET seen=1 WHERE user_id=? AND search_id=?", userId, searchId)
     : run("UPDATE jobs SET seen=1 WHERE user_id=?", userId);
 
-export const setContactsStatus = (id: string, status: Job["contacts_status"], error: string | null = null) =>
-  run("UPDATE jobs SET contacts_status=?, contacts_error=? WHERE id=?", status, error, id);
+export const setContactsStatus = (id: string, status: Job["contacts_status"], error: string | null = null, note: string | null = null) =>
+  run("UPDATE jobs SET contacts_status=?, contacts_error=?, contacts_note=? WHERE id=?", status, error, note, id);
 
 /** Reserva a busca de contatos (idempotência): só quem muda o status para "pending" executa. */
 export async function claimContacts(userId: string, id: string, force = false) {

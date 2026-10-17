@@ -2,9 +2,9 @@ import "server-only";
 import { chromium, type Browser } from "playwright-core";
 import * as cheerio from "cheerio";
 
-export type SerpResult = { title: string; link: string; snippet: string; date?: string };
+export type SerpResult = { title: string; link: string; snippet: string; date?: string; lines?: string[] };
 type Recency = "day" | "week" | "month" | "any";
-type Opts = { recency?: Recency; page?: number; num?: number };
+type Opts = { recency?: Recency; page?: number; num?: number; engines?: string[] };
 
 /** Modo demo só liga se você pedir (DEMO_MODE=1). O robô é próprio: não depende de API de terceiros. */
 export const isDemoMode = () => process.env.DEMO_MODE === "1";
@@ -91,7 +91,7 @@ async function google(q: string, { recency = "any", page = 1 }: Opts): Promise<S
 
       await p.waitForSelector("#search a h3, #rso a h3", { timeout: 8000 }).catch(() => {});
       const rows = await p.evaluate(() => {
-        const out: { title: string; link: string; snippet: string }[] = [];
+        const out: { title: string; link: string; snippet: string; lines: string[] }[] = [];
         const seen = new Set<string>();
         document.querySelectorAll("#search a:has(h3), #rso a:has(h3)").forEach((a) => {
           const href = (a as HTMLAnchorElement).href;
@@ -103,8 +103,9 @@ async function google(q: string, { recency = "any", page = 1 }: Opts): Promise<S
           if (!box) { box = a; for (let i = 0; i < 5 && box.parentElement; i++) box = box.parentElement; }
           const lines = ((box as HTMLElement).innerText || "").split("\n").map((l) => l.trim()).filter(Boolean)
             .filter((l) => l !== title && !/^https?:|›/.test(l) && l.length > 35);
+          const all = ((box as HTMLElement).innerText || "").split("\n").map((l) => l.trim()).filter((l) => l && l !== title && !/^https?:|›/.test(l));
           const snippet = lines.sort((x, y) => y.length - x.length)[0] ?? "";
-          out.push({ title, link: href, snippet: snippet.slice(0, 300) });
+          out.push({ title, link: href, snippet: snippet.slice(0, 300), lines: all.slice(0, 8).map((l) => l.slice(0, 200)) });
         });
         return out;
       });
@@ -190,7 +191,7 @@ const ENGINES: Record<string, (q: string, o: Opts) => Promise<SerpResult[]>> = {
  * e usa o próximo quando um é bloqueado ou volta vazio.
  */
 export async function googleSearch(q: string, opts: Opts = {}): Promise<SerpResult[]> {
-  const order = (process.env.SEARCH_ENGINES || "google,duckduckgo,bing").split(",").map((s) => s.trim()).filter((s) => s in ENGINES);
+  const order = (opts.engines ?? (process.env.SEARCH_ENGINES || "google,duckduckgo,bing").split(",")).map((s) => s.trim()).filter((s) => s in ENGINES);
   const errors: string[] = [];
   for (const name of order) {
     try {
