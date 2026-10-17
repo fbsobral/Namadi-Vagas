@@ -49,7 +49,7 @@ Regras de cada busca (o formato é: grupos de palavras; cada grupo junta seus te
 - location: a cidade do currículo; "remoto" se o currículo indicar preferência remota; vazio se não souber.
 - recency: use "week".
 - name: nome curto para a busca (ex.: "Product Designer sênior").
-- why: UMA frase explicando a escolha, citando o que viu no currículo.
+- why: UMA frase explicando a escolha, citando o que viu no currículo. Fale diretamente com a pessoa, sempre em segunda pessoa ("Você foi…"), nunca em terceira.
 
 searches: a primeira é a principal. Se (e somente se) o currículo sustentar, acrescente até 2 variações (cargos adjacentes realistas, ou outro nível). Não force variações.
 

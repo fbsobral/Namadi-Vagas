@@ -58,7 +58,8 @@ export default async function Dashboard({ searchParams }: PageProps<"/dashboard"
     return `/dashboard${q ? `?${q}` : ""}`;
   };
 
-  const anyRunning = searches.some((s) => s.last_status === "running");
+  // atualiza sozinha enquanto o robô busca, e também logo após criar uma busca (a 1ª rodada começa depois do redirecionamento)
+  const anyRunning = searches.some((s) => s.last_status === "running" || (s.active === 1 && s.last_run_at == null && isFresh(s.created_at, 5 * 60_000)));
   const title = current ? current.name : filter === "fav" ? "Favoritas" : "Todas as vagas";
   const sources = current ? (JSON.parse(current.sources) as string[]) : [];
 

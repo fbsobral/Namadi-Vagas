@@ -50,7 +50,7 @@ function cleanCompany(raw: string) {
 
 /* ------------------------------ leitura do resultado ------------------------------ */
 
-type Profile = { name: string; headline: string; meta: string; url: string; blob: string; snippet: string };
+type Profile = { name: string; headline: string; meta: string; url: string; blob: string; head: string; snippet: string };
 
 /** Lê um resultado do Google para um perfil do LinkedIn, usando título E todas as linhas do resultado. */
 export function parseProfile(r: SerpResult): Profile | null {
@@ -72,6 +72,7 @@ export function parseProfile(r: SerpResult): Profile | null {
     meta: metaLine,
     url: r.link.split("?")[0],
     blob: norm(`${title} ${lines.join(" ")} ${r.snippet}`),
+    head: norm(`${title} ${metaLine}`), // só título e linha "cidade · cargo · empresa"
     snippet: clean(metaLine || r.snippet).slice(0, 220),
   };
 }
@@ -88,11 +89,15 @@ export function evaluate(results: SerpResult[], company: string, jobTitle: strin
   const areas = detectAreas(jobTitle);
   const words = titleWords(jobTitle);
 
-  const pool = new Map<string, Profile>();
+  // A empresa costuma estar no título/cargo do perfil. Menção solta no texto ("sobre") só entra se faltar gente.
+  const all = new Map<string, Profile>();
   for (const r of results) {
     const p = parseProfile(r);
-    if (p && has(p.blob, co) && !pool.has(p.url)) pool.set(p.url, p);
+    if (p && !all.has(p.url)) all.set(p.url, p);
   }
+  const strong = [...all.values()].filter((p) => has(p.head, co));
+  const weak = [...all.values()].filter((p) => !has(p.head, co) && has(p.blob, co));
+  const pool = new Map<string, Profile>((strong.length >= 3 ? strong : [...strong, ...weak]).map((p) => [p.url, p]));
 
   const scored = [...pool.values()].flatMap((p) => {
     const head = norm(`${p.headline} ${p.name} ${p.meta}`); // cargo/área, sem o texto longo do "sobre"
@@ -142,14 +147,14 @@ export async function findContacts(jobId: string) {
     if (isDemoMode()) {
       raw = demoContacts(company, job.title);
     } else {
-      const key = `pool:${norm(company)}`;
+      const key = `pool2:${norm(company)}`;
       const cached = await getKv(key);
       raw = cached && Date.now() - cached.updated_at < POOL_TTL ? (JSON.parse(cached.value) as Raw[]) : [];
 
       if (!raw.length) {
         // até 3 páginas de "todos os perfis que citam a empresa"
-        for (let page = 1; page <= 3; page++) {
-          const r = await g(`site:linkedin.com/in "${company}"`, page).catch((e) => { if (page === 1) throw e; return [] as Raw[]; });
+        for (let page = 1; page <= 2; page++) {
+          const r = await g(`site:linkedin.com/in intitle:"${company}"`, page).catch((e) => { if (page === 1) throw e; return [] as Raw[]; });
           raw = raw.concat(r);
           if (r.length < 6) break;
         }
@@ -160,8 +165,8 @@ export async function findContacts(jobId: string) {
       if (result.picked.length < 6) {
         const areaWords = result.areas.length ? ` (${result.areas.map((a) => AREAS[a].label.split("/")[0]).join(" OR ")})` : "";
         const extra = [
-          `site:linkedin.com/in "${company}" (recrutador OR recruiter OR "talent acquisition" OR "recursos humanos" OR "people")`,
-          `site:linkedin.com/in "${company}"${areaWords || ` ${titleWords(job.title).slice(0, 2).join(" ")}`}`,
+          `site:linkedin.com/in intitle:"${company}" (recrutador OR recruiter OR "talent acquisition" OR "recursos humanos" OR "people")`,
+          `site:linkedin.com/in intitle:"${company}"${areaWords || ` ${titleWords(job.title).slice(0, 2).join(" ")}`}`,
         ];
         for (const q of extra) {
           const r = await g(q).catch(() => [] as Raw[]);

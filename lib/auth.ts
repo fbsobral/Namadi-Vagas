@@ -3,6 +3,7 @@ import { auth, currentUser } from "@clerk/nextjs/server";
 
 
 
+
 export async function getUserId() {
   return (await auth()).userId;
 }
