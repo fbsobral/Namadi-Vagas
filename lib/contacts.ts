@@ -40,8 +40,22 @@ function detectAreas(text: string): string[] {
 }
 
 const LEVEL_WORDS = /^(pleno|senior|junior|sr|jr|vaga|para|with|the|and|de|da|do|em|na|no|analista|assistente|especialista|specialist|analyst)$/;
+function roleOf(title: string) {
+  const first = title.split(/\s+[-–—|]\s+/)[0];
+  return first.trim().length >= 4 ? first : title; // "Analista de Marketing SR (CRM) - São Paulo" -> só o cargo
+}
+
 function titleWords(title: string) {
-  return norm(title).split(/[^a-z0-9]+/).filter((w) => w.length > 3 && !LEVEL_WORDS.test(w)).slice(0, 5);
+  return norm(roleOf(title)).split(/[^a-z0-9]+/).filter((w) => w.length > 3 && !LEVEL_WORDS.test(w)).slice(0, 5);
+}
+
+/** A vaga diz "PremieRpet®" e o perfil diz "PremieR pet": compara também sem espaços e pontuação. */
+function mentions(text: string, company: string) {
+  const co = norm(cleanCompany(company));
+  if (!co) return false;
+  if (has(text, co)) return true;
+  const sq = co.replace(/[^a-z0-9]/g, "");
+  return sq.length >= 8 && text.replace(/[^a-z0-9]/g, "").includes(sq); // nomes curtos exigem palavra inteira (evita "natura" em "naturalmente")
 }
 
 function cleanCompany(raw: string) {
@@ -85,8 +99,7 @@ export type Evaluated = {
 
 /** Passo 1: fica quem cita a empresa. Passo 2: fica quem é de RH/Recrutamento ou da mesma área da vaga. */
 export function evaluate(results: SerpResult[], company: string, jobTitle: string): Evaluated {
-  const co = norm(cleanCompany(company));
-  const areas = detectAreas(jobTitle);
+  const areas = detectAreas(roleOf(jobTitle));
   const words = titleWords(jobTitle);
 
   // A empresa costuma estar no título/cargo do perfil. Menção solta no texto ("sobre") só entra se faltar gente.
@@ -95,12 +108,15 @@ export function evaluate(results: SerpResult[], company: string, jobTitle: strin
     const p = parseProfile(r);
     if (p && !all.has(p.url)) all.set(p.url, p);
   }
-  const strong = [...all.values()].filter((p) => has(p.head, co));
-  const weak = [...all.values()].filter((p) => !has(p.head, co) && has(p.blob, co));
-  const pool = new Map<string, Profile>((strong.length >= 3 ? strong : [...strong, ...weak]).map((p) => [p.url, p]));
+  // Só o CARGO da pessoa conta para RH/área (a cidade na linha de meta não pode casar com a vaga).
+  const roleHead = (p: Profile) => norm(p.headline) || p.blob.slice(0, 160);
+  const strong = [...all.values()].filter((p) => mentions(p.head, company));
+  const weak = [...all.values()].filter((p) => !mentions(p.head, company) && mentions(p.blob, company));
+  const weakHR = weak.filter((p) => HR.test(roleHead(p))); // "sou analista de RH da empresa X…": empresa só no texto, cargo de RH
+  const pool = new Map<string, Profile>((strong.length >= 3 ? [...strong, ...weakHR] : [...strong, ...weak]).map((p) => [p.url, p]));
 
   const scored = [...pool.values()].flatMap((p) => {
-    const head = norm(`${p.headline} ${p.name} ${p.meta}`); // cargo/área, sem o texto longo do "sobre"
+    const head = roleHead(p); // só o cargo/área, sem nome, cidade nem o texto longo do "sobre"
     const isHR = HR.test(head);
     const profAreas = detectAreas(head);
     const sameArea = areas.some((a) => profAreas.includes(a)) || words.some((w) => has(head, w));
@@ -147,35 +163,25 @@ export async function findContacts(jobId: string) {
     if (isDemoMode()) {
       raw = demoContacts(company, job.title);
     } else {
-      const key = `pool2:${norm(company)}`;
+      const key = `pool3:${norm(company)}`;
       const cached = await getKv(key);
       raw = cached && Date.now() - cached.updated_at < POOL_TTL ? (JSON.parse(cached.value) as Raw[]) : [];
+      let incomplete = false;
 
       if (!raw.length) {
-        // até 3 páginas de "todos os perfis que citam a empresa"
-        for (let page = 1; page <= 2; page++) {
-          const r = await g(`site:linkedin.com/in intitle:"${company}"`, page).catch((e) => { if (page === 1) throw e; return [] as Raw[]; });
-          raw = raw.concat(r);
-          if (r.length < 6) break;
+        // Consultas simples, como numa pesquisa manual: "<empresa> linkedin rh". O Google devolve perfis
+        // cuja linha "cidade · cargo · empresa" já traz a empresa; o filtro local separa RH e a área da vaga.
+        const areas = detectAreas(job.title);
+        const areaTerm = areas.length ? AREAS[areas[0]].label.split("/")[0].toLowerCase() : titleWords(job.title).slice(0, 2).join(" ");
+        const queries = [`${company} linkedin rh`, `${company} linkedin recrutador talent acquisition`, `${company} linkedin ${areaTerm}`];
+        const seen = new Set<string>();
+        for (let i = 0; i < queries.length; i++) {
+          const r = await g(queries[i]).catch((e) => { if (i === 0) throw e; incomplete = true; return [] as Raw[]; });
+          for (const x of r) if (!seen.has(x.link)) { seen.add(x.link); raw.push(x); }
         }
+        // só guarda em cache se todas as consultas responderam (senão uma tentativa parcial ficaria 7 dias)
+        if (raw.length && !incomplete) await setKv(key, JSON.stringify(raw.slice(0, 80)));
       }
-
-      let result = evaluate(raw, company, job.title);
-      // pouco aproveitável? busca dirigida (RH e área), no máximo 2 consultas extras
-      if (result.picked.length < 6) {
-        const areaWords = result.areas.length ? ` (${result.areas.map((a) => AREAS[a].label.split("/")[0]).join(" OR ")})` : "";
-        const extra = [
-          `site:linkedin.com/in intitle:"${company}" (recrutador OR recruiter OR "talent acquisition" OR "recursos humanos" OR "people")`,
-          `site:linkedin.com/in intitle:"${company}"${areaWords || ` ${titleWords(job.title).slice(0, 2).join(" ")}`}`,
-        ];
-        for (const q of extra) {
-          const r = await g(q).catch(() => [] as Raw[]);
-          const seen = new Set(raw.map((x) => x.link));
-          raw = raw.concat(r.filter((x) => !seen.has(x.link)));
-        }
-        result = evaluate(raw, company, job.title);
-      }
-      if (raw.length) await setKv(key, JSON.stringify(raw.slice(0, 80)));
     }
 
     const result = evaluate(raw, company, job.title);
