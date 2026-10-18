@@ -174,7 +174,8 @@ function Card({ job, href, showSearch, dragging, onDragStart, onDragEnd, onMove,
         <span className="rounded-full bg-surface-2 px-2 py-0.5 font-medium text-ink-2">{sourceLabel(job.source)}</span>
         {showSearch && <span className="inline-flex items-center gap-1 rounded-full bg-surface-2 px-2 py-0.5 text-ink-2"><span className="size-1.5 rounded-full" style={{ background: job.search_color }} />{job.search_name}</span>}
         {job.contacts_status === "done" && <span className="text-ok">contatos ✓</span>}
-        {job.contacts_status === "pending" && <span className="text-accent">buscando…</span>}
+        {job.contacts_status === "pending" && !job.contacts_stale && <span className="text-accent">buscando…</span>}
+        {job.contacts_status === "pending" && job.contacts_stale && <span className="text-accent">busca travou</span>}
       </div>
       <div className="mt-3 flex items-center justify-between gap-2">
         {/* alternativa ao arrastar (celular/teclado) */}

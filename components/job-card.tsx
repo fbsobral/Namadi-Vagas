@@ -35,7 +35,8 @@ export function JobCard({ job, href, showSearch, index }: { job: Job; href: stri
               )}
               <span>encontrada {timeAgo(job.found_at)}</span>
               {job.filtered === 1 && job.filtered_reason && <span className="text-accent">filtrada: {job.filtered_reason}</span>}
-              {job.favorite === 1 && job.contacts_status === "pending" && <span className="text-accent">buscando pessoas…</span>}
+              {job.favorite === 1 && job.contacts_status === "pending" && !job.contacts_stale && <span className="text-accent">buscando pessoas…</span>}
+              {job.favorite === 1 && job.contacts_status === "pending" && job.contacts_stale && <span className="text-accent">busca de pessoas travou — abra a vaga para tentar de novo</span>}
               {job.favorite === 1 && job.contacts_status === "done" && <span className="text-ok">contatos prontos</span>}
             </div>
           </div>

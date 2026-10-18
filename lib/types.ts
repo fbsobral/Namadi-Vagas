@@ -47,6 +47,7 @@ export type Job = {
   contacts_status: "idle" | "pending" | "done" | "error";
   contacts_error: string | null;
   contacts_note: string | null;
+  contacts_stale?: boolean; // "buscando…" há tempo demais: travou
   description: string | null; // texto completo da vaga, quando conhecido
   filtered: number; // 1 = barrada por regra "na descrição" (aba Filtradas)
   filtered_reason: string | null;

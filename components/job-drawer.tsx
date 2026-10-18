@@ -39,7 +39,8 @@ export function JobDrawer({ job, contacts, closeHref, terms }: { job: Job; conta
   useEffect(() => { if (!job.seen) seeJob(job.id); }, [job.id, job.seen]);
 
   const fav = job.favorite === 1;
-  const pending = job.contacts_status === "pending";
+  const pending = job.contacts_status === "pending" && !job.contacts_stale;
+  const stuck = job.contacts_status === "pending" && !!job.contacts_stale;
 
   return (
     <div className="fixed inset-0 z-50">
@@ -83,6 +84,7 @@ export function JobDrawer({ job, contacts, closeHref, terms }: { job: Job; conta
           <div className="mt-5">
             {!fav && <Empty icon={<Sparkles className="size-5" />} title="Favorite para destravar" body="Ao favoritar, o robô vasculha o Google atrás de recrutadores, lideranças e gente do time na empresa." />}
             {fav && pending && <Skeletons />}
+            {fav && stuck && <Empty title="A busca demorou demais" body="Ela travou no meio do caminho. Toque em “Buscar de novo” para tentar outra vez." />}
             {fav && job.contacts_status === "error" && <Empty title="Não deu para buscar agora" body={job.contacts_error ?? "Tente novamente em instantes."} />}
             {fav && job.contacts_status === "done" && contacts.length === 0 && (
               <Empty title="Nenhum perfil do RH ou da área encontrado" body={job.contacts_note ?? "O Google não devolveu perfis ligados a essa empresa. Tente a busca manual."} action={

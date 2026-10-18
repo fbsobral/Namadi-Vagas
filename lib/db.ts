@@ -52,6 +52,7 @@ CREATE INDEX IF NOT EXISTS idx_jobs_search ON jobs(search_id, found_at DESC);
 UPDATE searches SET sources='["linkedin","gupy","web"]' WHERE sources='["web"]';
 
 ALTER TABLE jobs ADD COLUMN IF NOT EXISTS contacts_note TEXT;
+ALTER TABLE jobs ADD COLUMN IF NOT EXISTS contacts_at BIGINT;
 ALTER TABLE jobs ADD COLUMN IF NOT EXISTS notified_at BIGINT;
 ALTER TABLE jobs ADD COLUMN IF NOT EXISTS description TEXT;
 ALTER TABLE jobs ADD COLUMN IF NOT EXISTS filtered INTEGER NOT NULL DEFAULT 0;
@@ -324,7 +325,8 @@ export const countUnnotified = async (searchId: string, since: number) =>
 
 export type JobFilter = "all" | "new" | "fav" | "board" | "filtered";
 
-const JOB_COLS = `j.*, s.name AS search_name, s.color AS search_color, (s.user_id = ?) AS is_owner,
+const PENDING_MS = 4 * 60_000; // busca de contatos 'pendente' há mais que isso é considerada travada
+const JOB_COLS = `j.*, (j.contacts_status = 'pending' AND COALESCE(j.contacts_at, 0) < ${Date.now() - PENDING_MS}) AS contacts_stale, s.name AS search_name, s.color AS search_color, (s.user_id = ?) AS is_owner,
        COALESCE(u.favorite, 0) AS favorite, u.favorited_at AS favorited_at, COALESCE(u.seen, 0) AS seen, u.stage AS stage, COALESCE(u.stage_pos, 0) AS stage_pos`;
 const JOB_FROM = `FROM jobs j JOIN searches s ON s.id = j.search_id LEFT JOIN job_user u ON u.job_id = j.id AND u.user_id = ?`;
 
@@ -468,13 +470,24 @@ export const setContactsStatus = (id: string, status: Job["contacts_status"], er
 /** Reserva a busca de contatos (idempotência): só quem muda o status para "pending" executa. */
 export async function claimContacts(_userId: string, id: string, force = false) {
   // Contatos são públicos e valem para a vaga toda (quem tem acesso à vaga os vê); o acesso já foi checado.
+  // Uma busca "pendente" travada (processo caiu, navegador não abriu) pode ser reassumida após PENDING_MS.
+  const now = Date.now();
   const r = await run(
-    `UPDATE jobs SET contacts_status='pending', contacts_error=NULL
-     WHERE id=? AND contacts_status != 'pending' ${force ? "" : "AND contacts_status != 'done'"}`,
-    id,
+    `UPDATE jobs SET contacts_status='pending', contacts_error=NULL, contacts_at=?
+     WHERE id=? AND (contacts_status != 'pending' OR COALESCE(contacts_at, 0) < ?) ${force ? "" : "AND contacts_status != 'done'"}`,
+    now, id, now - PENDING_MS,
   );
   return (r.rowCount ?? 0) > 0;
 }
+
+/** Vaga (ainda favoritada por alguém) cuja busca de contatos foi barrada pelo Google, para tentar de novo quando a pausa acabar. */
+export const blockedContactJob = () =>
+  get<{ id: string }>(
+    `SELECT j.id FROM jobs j WHERE j.contacts_status = 'error' AND j.contacts_error LIKE 'O Google bloqueou%' AND j.found_at > ?
+       AND EXISTS (SELECT 1 FROM job_user u WHERE u.job_id = j.id AND u.favorite = 1)
+     ORDER BY COALESCE(j.contacts_at, 0) ASC LIMIT 1`,
+    Date.now() - 14 * 86_400_000,
+  );
 
 /* ---------- compartilhamento ---------- */
 

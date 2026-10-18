@@ -1,5 +1,6 @@
 import "server-only";
-import { chromium, type Browser } from "playwright-core";
+import { chromium, type Browser, type BrowserContext } from "playwright-core";
+import { getKv, setKv } from "./db";
 import * as cheerio from "cheerio";
 
 export type SerpResult = { title: string; link: string; snippet: string; date?: string; lines?: string[] };
@@ -17,19 +18,72 @@ const jitter = (a: number, b: number) => a + Math.random() * (b - a);
 
 const g = globalThis as unknown as {
   __vagasBrowser?: Promise<Browser>;
+  __vagasPersist?: Promise<BrowserContext>;
   __vagasQueue?: Promise<unknown>;
-  __vagasGoogleBlockedUntil?: number;
+  __vagasBlock?: { until: number; at: number };
+};
+
+/* ---------- pausa do Google após CAPTCHA: persistente (sobrevive a reinício) e crescente ---------- */
+
+const BLOCK_STEPS_MIN = [30, 120, 360, 720];
+export const hhmm = (ts: number) => new Date(ts).toLocaleTimeString("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit" });
+
+/** Até quando o Google está em pausa (0 = livre). */
+export async function googleBlockedUntil(): Promise<number> {
+  if (g.__vagasBlock && Date.now() - g.__vagasBlock.at < 15_000) return g.__vagasBlock.until;
+  const kv = await getKv("google_block");
+  const until = kv ? (JSON.parse(kv.value) as { until?: number }).until ?? 0 : 0;
+  g.__vagasBlock = { until, at: Date.now() };
+  return until;
+}
+
+async function noteBlocked() {
+  const kv = await getKv("google_block");
+  const strikes = (kv ? (JSON.parse(kv.value) as { strikes?: number }).strikes ?? 0 : 0) + 1;
+  const until = Date.now() + BLOCK_STEPS_MIN[Math.min(strikes - 1, BLOCK_STEPS_MIN.length - 1)] * 60_000;
+  await setKv("google_block", JSON.stringify({ until, strikes }));
+  g.__vagasBlock = { until, at: Date.now() };
+  return until;
+}
+
+async function noteOk() {
+  const kv = await getKv("google_block");
+  if (kv && ((JSON.parse(kv.value) as { strikes?: number }).strikes ?? 0) > 0) {
+    await setKv("google_block", JSON.stringify({ until: 0, strikes: 0 }));
+    g.__vagasBlock = { until: 0, at: Date.now() };
+  }
+}
+
+/** PROXY_URL (opcional), ex.: http://usuario:senha@host:porta — útil na VPS, onde IP de datacenter leva CAPTCHA com mais frequência. */
+function proxyOpt() {
+  const raw = process.env.PROXY_URL;
+  if (!raw) return undefined;
+  try {
+    const u = new URL(raw);
+    return { server: `${u.protocol}//${u.host}`, username: decodeURIComponent(u.username) || undefined, password: decodeURIComponent(u.password) || undefined };
+  } catch {
+    return undefined;
+  }
+}
+const launchBase = () => ({
+  headless: true,
+  channel: process.env.PLAYWRIGHT_CHANNEL || undefined, // ex.: "chrome" no seu Mac
+  executablePath: process.env.CHROMIUM_PATH || undefined,
+  args: ["--no-sandbox", "--disable-dev-shm-usage", "--disable-blink-features=AutomationControlled"],
+  proxy: proxyOpt(),
+});
+const ctxOpts = {
+  userAgent: UA,
+  locale: "pt-BR",
+  timezoneId: "America/Sao_Paulo",
+  viewport: { width: 1366, height: 860 },
+  extraHTTPHeaders: { "Accept-Language": "pt-BR,pt;q=0.9,en;q=0.6" },
 };
 
 function browser() {
   if (!g.__vagasBrowser) {
     g.__vagasBrowser = chromium
-      .launch({
-        headless: true,
-        channel: process.env.PLAYWRIGHT_CHANNEL || undefined, // ex.: "chrome" no seu Mac
-        executablePath: process.env.CHROMIUM_PATH || undefined,
-        args: ["--no-sandbox", "--disable-dev-shm-usage", "--disable-blink-features=AutomationControlled"],
-      })
+      .launch(launchBase())
       .then((b) => {
         b.on("disconnected", () => { g.__vagasBrowser = undefined; });
         return b;
@@ -47,15 +101,33 @@ function enqueue<T>(fn: () => Promise<T>): Promise<T> {
 
 /* ---------- Google (Playwright) ---------- */
 
+/** BROWSER_PROFILE_DIR (opcional): perfil persistente — guarda cookies entre buscas, como um visitante que volta (costuma reduzir CAPTCHA). */
+function persistent() {
+  if (!g.__vagasPersist) {
+    g.__vagasPersist = chromium
+      .launchPersistentContext(process.env.BROWSER_PROFILE_DIR!, { ...launchBase(), ...ctxOpts })
+      .then(async (c) => {
+        await c.addInitScript(() => Object.defineProperty(navigator, "webdriver", { get: () => undefined }));
+        c.on("close", () => { g.__vagasPersist = undefined; });
+        return c;
+      })
+      .catch((e) => { g.__vagasPersist = undefined; throw e; });
+  }
+  return g.__vagasPersist;
+}
+
 async function withPage<T>(fn: (p: import("playwright-core").Page, ctx: import("playwright-core").BrowserContext) => Promise<T>): Promise<T> {
+  if (process.env.BROWSER_PROFILE_DIR) {
+    const ctx = await persistent();
+    const page = await ctx.newPage();
+    try {
+      return await fn(page, ctx);
+    } finally {
+      await page.close().catch(() => {});
+    }
+  }
   const b = await browser();
-  const ctx = await b.newContext({
-    userAgent: UA,
-    locale: "pt-BR",
-    timezoneId: "America/Sao_Paulo",
-    viewport: { width: 1366, height: 860 },
-    extraHTTPHeaders: { "Accept-Language": "pt-BR,pt;q=0.9,en;q=0.6" },
-  });
+  const ctx = await b.newContext(ctxOpts);
   await ctx.addInitScript(() => Object.defineProperty(navigator, "webdriver", { get: () => undefined }));
   try {
     return await fn(await ctx.newPage(), ctx);
@@ -69,7 +141,8 @@ async function withPage<T>(fn: (p: import("playwright-core").Page, ctx: import("
 class Blocked extends Error {}
 
 async function google(q: string, { recency = "any", page = 1 }: Opts): Promise<SerpResult[]> {
-  if ((g.__vagasGoogleBlockedUntil ?? 0) > Date.now()) throw new Blocked("Google em pausa após CAPTCHA");
+  const pausedUntil = await googleBlockedUntil();
+  if (pausedUntil > Date.now()) throw new Blocked(`Google em pausa após CAPTCHA, volta depois das ${hhmm(pausedUntil)}`);
 
   return enqueue(() => withPage(async (p, ctx) => {
     {
@@ -85,8 +158,8 @@ async function google(q: string, { recency = "any", page = 1 }: Opts): Promise<S
 
       const blocked = /\/sorry\/|recaptcha/i.test(p.url()) || (await p.locator("form#captcha-form, #recaptcha, iframe[src*='recaptcha']").count()) > 0;
       if (blocked) {
-        g.__vagasGoogleBlockedUntil = Date.now() + 30 * 60_000;
-        throw new Blocked("Google pediu CAPTCHA");
+        const until = await noteBlocked();
+        throw new Blocked(`Google pediu CAPTCHA, volta depois das ${hhmm(until)}`);
       }
 
       await p.waitForSelector("#search a h3, #rso a h3", { timeout: 8000 }).catch(() => {});
@@ -122,6 +195,7 @@ async function google(q: string, { recency = "any", page = 1 }: Opts): Promise<S
       }
       const rowsOk = rows.filter((r) => !/google\.[a-z.]+\//.test(r.link));
       if (!rowsOk.length && rows.length) throw new Blocked("não consegui resolver os links do Google");
+      if (rowsOk.length) await noteOk(); // Google respondeu normalmente: zera o histórico de bloqueios
       return rowsOk;
     }
   }));

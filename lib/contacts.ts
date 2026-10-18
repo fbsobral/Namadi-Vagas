@@ -1,7 +1,7 @@
 import "server-only";
 import { randomUUID } from "node:crypto";
-import { clearContacts, getJobById, getKv, insertContact, setContactsStatus, setKv } from "./db";
-import { googleSearch, isDemoMode, type SerpResult } from "./serp";
+import { blockedContactJob, claimContacts, clearContacts, getJobById, getKv, insertContact, setContactsStatus, setKv } from "./db";
+import { googleBlockedUntil, googleSearch, isDemoMode, type SerpResult } from "./serp";
 import { demoContacts } from "./demo";
 import type { ContactRole } from "./types";
 
@@ -143,7 +143,10 @@ const g = (q: string, page = 1) => googleSearch(q, { page, engines: ["google"] }
 
 function friendly(e: unknown) {
   const m = e instanceof Error ? e.message : String(e);
-  if (/captcha|pausa/i.test(m)) return "O Google bloqueou a consulta (CAPTCHA). Tente de novo em cerca de 30 minutos.";
+  if (/captcha|pausa/i.test(m)) {
+    const t = m.match(/\d{2}:\d{2}/)?.[0];
+    return `O Google bloqueou a consulta (CAPTCHA). ${t ? `Vamos tentar de novo sozinhos depois das ${t}.` : "Vamos tentar de novo sozinhos mais tarde."}`;
+  }
   return m;
 }
 
@@ -156,6 +159,19 @@ export async function findContacts(jobId: string) {
   if (!job) return;
 
   try {
+    await Promise.race([
+      work(job),
+      new Promise<never>((_, rej) => setTimeout(() => rej(new Error("A busca de contatos demorou demais. Tente de novo.")), 150_000)),
+    ]);
+  } catch (e) {
+    console.error("[contatos]", job.company, "-", e instanceof Error ? e.message : e);
+    await setContactsStatus(jobId, "error", friendly(e));
+  }
+}
+
+async function work(job: NonNullable<Awaited<ReturnType<typeof getJobById>>>) {
+  const jobId = job.id;
+  {
     const company = cleanCompany(job.company);
     if (company.length < 2 || /^empresa$/i.test(company)) throw new Error("Não consegui identificar o nome da empresa desta vaga.");
 
@@ -178,6 +194,8 @@ export async function findContacts(jobId: string) {
         for (let i = 0; i < queries.length; i++) {
           const r = await g(queries[i]).catch((e) => { if (i === 0) throw e; incomplete = true; return [] as Raw[]; });
           for (const x of r) if (!seen.has(x.link)) { seen.add(x.link); raw.push(x); }
+          // já deu gente suficiente? então poupa o Google das consultas restantes (menos consultas = menos CAPTCHA)
+          if (i < queries.length - 1 && evaluate(raw, company, job.title).picked.length >= 5) break;
         }
         // só guarda em cache se todas as consultas responderam (senão uma tentativa parcial ficaria 7 dias)
         if (raw.length && !incomplete) await setKv(key, JSON.stringify(raw.slice(0, 80)));
@@ -193,7 +211,17 @@ export async function findContacts(jobId: string) {
       ? `Achei ${result.pool} perfis que citam ${company}; mostrando ${result.picked.length} do RH${area ? ` ou da área de ${area}` : " ou da mesma área"}.`
       : `O Google não retornou perfis que citem ${company}.`;
     await setContactsStatus(jobId, "done", null, note);
-  } catch (e) {
-    await setContactsStatus(jobId, "error", friendly(e));
   }
+}
+
+/**
+ * Quando o Google barra uma busca de contatos (CAPTCHA), ela não fica perdida: assim que a pausa acaba,
+ * o agendador refaz uma por vez. Retorna true se iniciou alguma.
+ */
+export async function retryBlockedContacts() {
+  if ((await googleBlockedUntil()) > Date.now()) return false;
+  const job = await blockedContactJob();
+  if (!job || !(await claimContacts("", job.id))) return false;
+  await findContacts(job.id);
+  return true;
 }
