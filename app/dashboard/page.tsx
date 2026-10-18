@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { getUserId, getViewer } from "@/lib/auth";
 import { UserButton } from "@clerk/nextjs";
 import { AlertTriangle, Columns3, LayoutList, Radar as RadarIcon, Star } from "lucide-react";
-import { filteredCount, getJob, getKv, pendingInvitesFor, jobCounts, listContacts, listJobs, listRuns, listSearches, type JobFilter } from "@/lib/db";
+import { boardCounts, filteredCount, getJob, getKv, pendingInvitesFor, jobCounts, listContacts, listJobs, listRuns, listSearches, type JobFilter } from "@/lib/db";
 import { isDemoMode } from "@/lib/serp";
 import { freqLabel, sourceLabel } from "@/lib/sources";
 import { includeTerms, parseSpec, specToBoolean } from "@/lib/query";
@@ -33,6 +33,7 @@ export default async function Dashboard({ searchParams }: PageProps<"/dashboard"
   const filter: JobFilter = view === "board" ? "board" : one("f") === "new" ? "new" : one("f") === "fav" ? "fav" : one("f") === "filtered" ? "filtered" : "all";
   const [jobs, nFiltered] = await Promise.all([listJobs(userId, { searchId: current?.id, filter }), filteredCount(userId, current?.id ?? null)]);
   const [beat, runs] = await Promise.all([getKv("scheduler_heartbeat"), current ? listRuns(current.id) : Promise.resolve([])]);
+  const boardByS = view === "board" ? await boardCounts(userId) : ({} as Record<string, number>);
   const jobId = one("job");
   const drawerJob = jobId ? await getJob(userId, jobId) : null;
   const contacts = drawerJob ? await listContacts(drawerJob.id) : [];
@@ -60,7 +61,7 @@ export default async function Dashboard({ searchParams }: PageProps<"/dashboard"
 
   // atualiza sozinha enquanto o robô busca, e também logo após criar uma busca (a 1ª rodada começa depois do redirecionamento)
   const anyRunning = searches.some((s) => s.last_status === "running" || (s.active === 1 && s.last_run_at == null && isFresh(s.created_at, 5 * 60_000)));
-  const title = current ? current.name : filter === "fav" ? "Favoritas" : "Todas as vagas";
+  const title = current ? current.name : view === "board" ? "Kanban" : filter === "fav" ? "Favoritas" : "Todas as vagas";
   const sources = current ? (JSON.parse(current.sources) as string[]) : [];
 
   return (
@@ -104,7 +105,7 @@ export default async function Dashboard({ searchParams }: PageProps<"/dashboard"
                 <RunHistory runs={runs} />
               </>
             ) : (
-              <p className="mt-3 text-ink-2">{counts.total} vagas · {counts.unseen} novas · {counts.favs} favoritas</p>
+              <p className="mt-3 text-ink-2">{view === "board" ? `${counts.favs} ${counts.favs === 1 ? "vaga" : "vagas"} no quadro, de todas as suas buscas` : `${counts.total} vagas · ${counts.unseen} novas · ${counts.favs} favoritas`}</p>
             )}
           </header>
 
@@ -129,7 +130,7 @@ export default async function Dashboard({ searchParams }: PageProps<"/dashboard"
 
           {view === "board" ? (
             <div className="mt-6">
-              <KanbanBoard jobs={jobs} showSearch={!current} hrefs={Object.fromEntries(jobs.map((j) => [j.id, base({ job: j.id })]))} />
+              <KanbanBoard jobs={jobs} showSearch={!current} currentSearchId={current?.id ?? null} searchOptions={searches.map((s) => ({ id: s.id, name: s.name, color: s.color, count: boardByS[s.id] ?? 0 }))} hrefs={Object.fromEntries(jobs.map((j) => [j.id, base({ job: j.id })]))} />
             </div>
           ) : (
             <div className="mt-5 grid gap-3 sm:mt-6 sm:gap-4">

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Menu, Plus, Star, Layers, X } from "lucide-react";
+import { Menu, Plus, Star, Layers, X, Columns3 } from "lucide-react";
 import { Logo } from "./logo";
 import { SearchDialog } from "./search-dialog";
 import { freqLabel } from "@/lib/sources";
@@ -23,8 +23,9 @@ export function Sidebar({ searches, counts, currentId, filter, view = "list", ro
   const [dialog, setDialog] = useState(false);
   const mine = searches.filter((s) => s.is_owner !== false);
   const shared = searches.filter((s) => s.is_owner === false);
-  const allActive = !currentId && filter !== "fav";
-  const favActive = !currentId && filter === "fav";
+  const allActive = !currentId && view === "list" && filter !== "fav";
+  const favActive = !currentId && view === "list" && filter === "fav";
+  const boardActive = !currentId && view === "board";
 
   const nav = (
     <div className="flex h-full flex-col">
@@ -34,7 +35,8 @@ export function Sidebar({ searches, counts, currentId, filter, view = "list", ro
       </div>
 
       <nav className="space-y-1 px-3" onClick={() => setMobile(false)}>
-        <NavItem href={view === "board" ? "/dashboard?v=board" : "/dashboard"} active={allActive} icon={<Layers className="size-4" />} label="Todas as vagas" badge={counts.unseen} />
+        <NavItem href="/dashboard" active={allActive} icon={<Layers className="size-4" />} label="Todas as vagas" badge={counts.unseen} />
+        <NavItem href="/dashboard?v=board" active={boardActive} icon={<Columns3 className="size-4" />} label="Kanban" count={counts.favs} />
         <NavItem href="/dashboard?f=fav" active={favActive} icon={<Star className="size-4" />} label="Favoritas" count={counts.favs} />
       </nav>
 

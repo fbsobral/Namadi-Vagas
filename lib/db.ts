@@ -340,6 +340,17 @@ export function listJobs(userId: string, opts: { searchId?: string | null; filte
   return all<Job>(`SELECT ${JOB_COLS} ${JOB_FROM} WHERE ${where.join(" AND ")} ORDER BY ${order} LIMIT ${Number(opts.limit ?? 120)}`, ...params);
 }
 
+/** Quantas vagas de cada busca estão no quadro (kanban) desta pessoa. */
+export async function boardCounts(userId: string) {
+  const rows = await all<{ id: string; n: number }>(
+    `SELECT j.search_id AS id, COUNT(*) AS n FROM jobs j JOIN searches s ON s.id = j.search_id
+     JOIN job_user u ON u.job_id = j.id AND u.user_id = ?
+     WHERE u.stage IS NOT NULL AND j.filtered = 0 AND ${ACCESS} GROUP BY j.search_id`,
+    userId, userId, userId,
+  );
+  return Object.fromEntries(rows.map((r) => [r.id, Number(r.n)])) as Record<string, number>;
+}
+
 export async function jobCounts(userId: string) {
   return (await get<{ total: number; unseen: number; favs: number }>(
     `SELECT COUNT(*) AS total,
