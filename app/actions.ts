@@ -229,6 +229,13 @@ export async function acceptInviteAction(by: { id?: string; token?: string }) {
   return searchId;
 }
 
+/** O convidado escolhe como quer receber as vagas novas desta busca. */
+export async function setMyNotifyAction(searchId: string, mode: "off" | "run" | "daily") {
+  if (!["off", "run", "daily"].includes(mode)) throw new Error("Modo inválido");
+  await q.setMyNotify(await uid(), searchId, mode);
+  refresh();
+}
+
 export async function declineInviteAction(memberId: string) {
   const viewer = await getViewer();
   if (!viewer) throw new Error("Não autenticado");

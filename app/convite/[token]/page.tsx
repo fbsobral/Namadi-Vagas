@@ -31,7 +31,7 @@ export default async function InvitePage({ params }: { params: Promise<{ token: 
         <p className="text-xs font-medium tracking-wider text-accent uppercase">Convite</p>
         <h1 className="font-display mt-2 text-4xl leading-[1.05]"><em className="text-accent not-italic">{inv.inviter_name ?? "Alguém"}</em> compartilhou uma busca com você</h1>
         <p className="mt-4 flex items-center gap-2 text-lg"><span className="size-3 rounded-full" style={{ background: inv.search_color }} />{inv.search_name}</p>
-        <p className="mt-3 text-sm text-ink-2">Ao aceitar, você vê as vagas que o robô encontrar. Seus favoritos e seu Kanban continuam só seus.</p>
+        <p className="mt-3 text-sm text-ink-2">Ao aceitar, você vê as vagas que o robô encontrar e recebe as vagas novas por e-mail (dá para desligar quando quiser). Seus favoritos e seu Kanban continuam só seus.</p>
         <AcceptInvite token={token} memberId={inv.id} />
       </>
     );

@@ -7,7 +7,7 @@ import { detectSource, looksLikeJob, normalizeUrl, parseTitle } from "./parse";
 import { buildGoogleQuery } from "./sources";
 import { evaluateJob, parseSpec, type QuerySpec } from "./query";
 import { gupyFetch, linkedinDescription, linkedinFetch, type Found } from "./providers";
-import { sendDigest } from "./notify";
+import { notifyMembersRun, sendDigest } from "./notify";
 import type { Search } from "./types";
 
 const running = new Set<string>();
@@ -148,10 +148,16 @@ export async function runSearch(searchId: string): Promise<{ added: number; tota
     if (enr) note += ` · ${enr}`;
 
     // Resumo por e-mail: só se esta rodada trouxe vaga nova. Falha de e-mail não derruba a rodada.
-    if (!error && added > 0 && s.notify_mode === "run") {
-      const m = await sendDigest(s);
-      if (m.sent) note += ` · ✉ ${m.sent} no e-mail`;
-      else if (m.error) note += ` · ✉ falhou: ${m.error}`;
+    if (!error && added > 0) {
+      if (s.notify_mode === "run") {
+        const m = await sendDigest(s);
+        if (m.sent) note += ` · ✉ ${m.sent} no e-mail`;
+        else if (m.error) note += ` · ✉ falhou: ${m.error}`;
+      }
+      // convidados da busca (cada um com o seu modo e o seu controle do que já foi avisado)
+      const g = await notifyMembersRun(s);
+      if (g.recipients) note += ` · ✉ ${g.recipients} convidado${g.recipients === 1 ? "" : "s"}`;
+      if (g.errors) note += ` · ✉ ${g.errors} convidado${g.errors === 1 ? "" : "s"} com erro`;
     }
   } catch (e) {
     error = e instanceof Error ? e.message : String(e);

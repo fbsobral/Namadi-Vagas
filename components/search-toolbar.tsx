@@ -2,8 +2,8 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { CheckCheck, LogOut, Pause, Pencil, Play, RefreshCw, Share2, Trash2 } from "lucide-react";
-import { leaveSharedSearch, removeSearch, runNow, seeAll, toggleSearch } from "@/app/actions";
+import { CheckCheck, LogOut, Mail, Pause, Pencil, Play, RefreshCw, Share2, Trash2 } from "lucide-react";
+import { leaveSharedSearch, removeSearch, runNow, seeAll, setMyNotifyAction, toggleSearch } from "@/app/actions";
 import { SearchDialog } from "./search-dialog";
 import { ShareDialog } from "./share-dialog";
 import type { Search } from "@/lib/types";
@@ -66,6 +66,17 @@ export function SharedToolbar({ search, unseen, ownerName }: { search: Search; u
     <div className="flex flex-wrap items-center gap-2">
       <span className="inline-flex items-center gap-2 rounded-full bg-accent-soft px-3.5 py-2 text-sm text-accent">Compartilhada por <strong className="font-semibold">{ownerName ?? "alguém"}</strong></span>
       {unseen > 0 && <button className={btn} disabled={pending} onClick={() => start(async () => { await seeAll(search.id); })}><CheckCheck className="size-4" /> Marcar vistas</button>}
+      <label className={`${btn} cursor-pointer`}>
+        <Mail className="size-4" />
+        <span className="sr-only sm:not-sr-only">E-mail:</span>
+        <select aria-label="Receber e-mail das vagas novas" defaultValue={search.my_notify ?? "run"} disabled={pending}
+          onChange={(e) => start(async () => { await setMyNotifyAction(search.id, e.target.value as "off" | "run" | "daily"); })}
+          className="cursor-pointer bg-transparent pr-1 font-medium outline-none">
+          <option value="run">a cada rodada</option>
+          <option value="daily">resumo diário (8h)</option>
+          <option value="off">desligado</option>
+        </select>
+      </label>
       {confirm ? (
         <span className="anim-pop inline-flex items-center gap-1 rounded-full border border-accent bg-accent-soft py-1 pr-1 pl-4 text-sm text-accent">
           Sair desta busca?

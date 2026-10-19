@@ -63,7 +63,7 @@ export function ShareDialog({ searchId, searchName, onClose }: { searchId: strin
         <button type="button" onClick={onClose} aria-label="Fechar" className="absolute top-5 right-5 grid size-9 place-items-center rounded-full text-ink-3 transition hover:bg-surface-2 hover:text-ink"><X className="size-5" /></button>
         <p className="text-xs font-medium tracking-wider text-accent uppercase">Compartilhar</p>
         <h2 className="font-display mt-1 pr-10 text-3xl sm:text-4xl">{searchName}</h2>
-        <p className="mt-2 text-sm text-ink-2">Quem aceitar o convite vê as vagas que o robô encontrar nesta busca. <strong className="font-medium text-ink">Favoritos e Kanban continuam individuais.</strong> Só você edita, pausa e exclui.</p>
+        <p className="mt-2 text-sm text-ink-2">Quem aceitar o convite vê as vagas que o robô encontrar nesta busca e <strong className="font-medium text-ink">recebe as vagas novas por e-mail</strong> (cada pessoa pode desligar). Favoritos e Kanban continuam individuais. Só você edita, pausa e exclui.</p>
 
         <form onSubmit={invite} className="mt-6 flex gap-2">
           <div className="relative min-w-0 flex-1">

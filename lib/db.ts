@@ -79,6 +79,20 @@ CREATE TABLE IF NOT EXISTS search_members (
 CREATE INDEX IF NOT EXISTS idx_members_email ON search_members(email);
 CREATE INDEX IF NOT EXISTS idx_members_user ON search_members(user_id);
 
+-- e-mail das vagas novas, por convidado (cada um liga/desliga o seu)
+ALTER TABLE search_members ADD COLUMN IF NOT EXISTS notify_mode TEXT NOT NULL DEFAULT 'run';
+ALTER TABLE search_members ADD COLUMN IF NOT EXISTS notify_since BIGINT;
+ALTER TABLE search_members ADD COLUMN IF NOT EXISTS notify_last_at BIGINT;
+UPDATE search_members SET notify_since = (extract(epoch from now()) * 1000)::bigint WHERE notify_since IS NULL AND status = 'accepted';
+
+-- vagas já avisadas a cada convidado (o dono usa jobs.notified_at)
+CREATE TABLE IF NOT EXISTS member_notified (
+  job_id TEXT NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
+  member_id TEXT NOT NULL REFERENCES search_members(id) ON DELETE CASCADE,
+  at BIGINT NOT NULL,
+  PRIMARY KEY (job_id, member_id)
+);
+
 -- estado PESSOAL de cada vaga (favorito, etapa do kanban, visto): cada pessoa tem o seu
 CREATE TABLE IF NOT EXISTS job_user (
   job_id TEXT NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
@@ -198,12 +212,13 @@ export const listSearches = (userId: string) =>
   all<Search>(
     `SELECT s.*, (s.user_id = ?) AS is_owner,
        (SELECT m.inviter_name FROM search_members m WHERE m.search_id = s.id AND m.user_id = ? AND m.status = 'accepted') AS owner_name,
+       (SELECT m.notify_mode FROM search_members m WHERE m.search_id = s.id AND m.user_id = ? AND m.status = 'accepted') AS my_notify,
        (SELECT COUNT(*) FROM search_members m WHERE m.search_id = s.id AND m.status = 'accepted') AS shared_count,
        (SELECT COUNT(*) FROM jobs j WHERE j.search_id = s.id AND j.filtered = 0) AS total,
        (SELECT COUNT(*) FROM jobs j LEFT JOIN job_user u ON u.job_id = j.id AND u.user_id = ? WHERE j.search_id = s.id AND j.filtered = 0 AND COALESCE(u.seen, 0) = 0) AS unseen,
        (SELECT COUNT(*) FROM jobs j JOIN job_user u ON u.job_id = j.id AND u.user_id = ? WHERE j.search_id = s.id AND j.filtered = 0 AND u.favorite = 1) AS favs
      FROM searches s WHERE ${ACCESS} ORDER BY (s.user_id = ?) DESC, s.created_at ASC`,
-    userId, userId, userId, userId, userId, userId, userId,
+    userId, userId, userId, userId, userId, userId, userId, userId,
   );
 
 export const getSearch = (userId: string, id: string) =>
@@ -489,11 +504,60 @@ export const blockedContactJob = () =>
     Date.now() - 14 * 86_400_000,
   );
 
+/* ---------- e-mail dos convidados ---------- */
+
+export type MemberDue = Member & { search_name: string; search_color: string };
+
+/** Convidados que aceitaram e querem e-mail neste modo ("run" = a cada rodada, "daily" = resumo diário). */
+export const membersByMode = (searchId: string, mode: "run" | "daily") =>
+  all<Member>("SELECT * FROM search_members WHERE search_id = ? AND status = 'accepted' AND notify_mode = ?", searchId, mode);
+
+export const dueMemberDigests = (boundary: number) =>
+  all<MemberDue>(
+    `SELECT m.*, s.name AS search_name, s.color AS search_color FROM search_members m JOIN searches s ON s.id = m.search_id
+     WHERE m.status = 'accepted' AND m.notify_mode = 'daily' AND (m.notify_last_at IS NULL OR m.notify_last_at < ?)`,
+    boundary,
+  );
+
+/** Reserva (atômico) as vagas ainda não avisadas A ESTE convidado. */
+export async function claimUnnotifiedForMember(memberId: string, searchId: string, since: number, limit = 200) {
+  await ready();
+  const r = await pool().query(
+    `WITH ins AS (
+       INSERT INTO member_notified (job_id, member_id, at)
+       SELECT j.id, $1, $2 FROM jobs j
+        WHERE j.search_id = $3 AND j.filtered = 0 AND j.found_at >= $4
+          AND NOT EXISTS (SELECT 1 FROM member_notified n WHERE n.job_id = j.id AND n.member_id = $1)
+        ORDER BY j.found_at DESC LIMIT $5
+       ON CONFLICT DO NOTHING RETURNING job_id
+     )
+     SELECT j.id, j.title, j.company, j.location, j.source, j.url, j.found_at FROM jobs j JOIN ins ON ins.job_id = j.id ORDER BY j.found_at DESC`,
+    [memberId, Date.now(), searchId, since, limit],
+  );
+  return r.rows as DigestJob[];
+}
+
+export const unclaimForMember = async (memberId: string, jobIds: string[]) => {
+  if (jobIds.length) await run(`DELETE FROM member_notified WHERE member_id = ? AND job_id IN (${jobIds.map(() => "?").join(",")})`, memberId, ...jobIds);
+};
+
+export const touchMemberNotifyLast = (id: string) => run("UPDATE search_members SET notify_last_at = ? WHERE id = ?", Date.now(), id);
+export const disableMemberNotify = (id: string) => run("UPDATE search_members SET notify_mode = 'off' WHERE id = ?", id);
+
+/** O convidado escolhe o seu modo. Ao religar, só vagas daqui para frente (sem despejar o histórico). */
+export const setMyNotify = (userId: string, searchId: string, mode: "off" | "run" | "daily") =>
+  run(
+    `UPDATE search_members SET notify_since = CASE WHEN notify_mode = 'off' AND ? <> 'off' THEN ? ELSE notify_since END, notify_mode = ?
+     WHERE search_id = ? AND user_id = ? AND status = 'accepted'`,
+    mode, Date.now(), mode, searchId, userId,
+  );
+
 /* ---------- compartilhamento ---------- */
 
 export type Member = {
   id: string; search_id: string; email: string; user_id: string | null; status: "pending" | "accepted";
   inviter_name: string | null; member_name: string | null; token: string; created_at: number; accepted_at: number | null;
+  notify_mode: "off" | "run" | "daily"; notify_since: number | null; notify_last_at: number | null;
 };
 export type PendingInvite = Member & { search_name: string; search_color: string };
 
@@ -514,6 +578,7 @@ export async function inviteMember(ownerId: string, searchId: string, email: str
   const member: Member = {
     id: randomUUID(), search_id: searchId, email: e, user_id: null, status: "pending",
     inviter_name: inviterName, member_name: null, token: randomBytes(18).toString("base64url"), created_at: Date.now(), accepted_at: null,
+    notify_mode: "run", notify_since: null, notify_last_at: null,
   };
   await run(
     "INSERT INTO search_members (id, search_id, email, status, invited_by, inviter_name, token, created_at) VALUES (?, ?, ?, 'pending', ?, ?, ?, ?)",
@@ -549,7 +614,7 @@ export const inviteByToken = (token: string) =>
 export async function acceptInvite(userId: string, emails: string[], by: { id?: string; token?: string }, name: string | null) {
   await ready();
   const r = await pool().query(
-    `UPDATE search_members SET status = 'accepted', user_id = $1, member_name = $2, accepted_at = $3
+    `UPDATE search_members SET status = 'accepted', user_id = $1, member_name = $2, accepted_at = $3, notify_since = $3
      WHERE status = 'pending' AND email = ANY($4) AND ${by.id ? "id = $5" : "token = $5"} RETURNING search_id`,
     [userId, name, Date.now(), emails, by.id ?? by.token],
   );

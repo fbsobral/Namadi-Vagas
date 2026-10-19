@@ -22,6 +22,7 @@ export type Search = {
   is_owner?: boolean; // false = busca compartilhada comigo
   owner_name?: string | null;
   shared_count?: number;
+  my_notify?: "off" | "run" | "daily" | null; // meu modo de e-mail, quando a busca é compartilhada comigo
   // agregados
   total?: number;
   unseen?: number;

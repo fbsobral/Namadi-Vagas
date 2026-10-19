@@ -12,6 +12,7 @@ export function renderDigest(o: {
   searchUrl: string;
   unsubscribeUrl: string;
   test?: boolean;
+  sharedBy?: string; // quando o e-mail vai para um convidado
 }) {
   const n = o.jobs.length;
   const shown = o.jobs.slice(0, MAX);
@@ -55,7 +56,7 @@ export function renderDigest(o: {
         <a href="${esc(o.searchUrl)}" style="display:inline-block;background:#e8501f;color:#ffffff;font-weight:700;font-size:15px;text-decoration:none;padding:13px 26px;border-radius:999px">Abrir no painel</a>
       </td></tr>
       <tr><td style="padding:16px 4px 0 4px;border-top:1px solid #e5dfd1;font-size:12px;line-height:1.6;color:#8e8779">
-        Você recebe este resumo porque ligou o e-mail da busca <strong>${esc(o.searchName)}</strong>.<br>
+        ${o.sharedBy ? `Você recebe este resumo porque tem acesso à busca <strong>${esc(o.searchName)}</strong>, compartilhada por <strong>${esc(o.sharedBy)}</strong>.` : `Você recebe este resumo porque ligou o e-mail da busca <strong>${esc(o.searchName)}</strong>.`}<br>
         <a href="${esc(o.unsubscribeUrl)}" style="color:#8e8779">Parar de receber este e-mail</a> · <a href="${esc(o.appUrl)}" style="color:#8e8779">Namadi Vagas</a>
       </td></tr>
     </table>
@@ -86,7 +87,7 @@ export function renderInvite(o: { inviterName: string; searchName: string; accep
       <tr><td style="background:#ffffff;border:1px solid #e5dfd1;border-radius:20px;padding:26px 24px">
         <div style="font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:#8e8779;font-weight:600">Convite</div>
         <div style="margin-top:8px;font-family:Georgia,'Times New Roman',serif;font-size:28px;line-height:1.15;color:#17140f"><strong style="font-weight:400">${esc(o.inviterName)}</strong> compartilhou uma busca de vagas com você</div>
-        <div style="margin-top:14px;font-size:15px;line-height:1.6;color:#5a544a">Busca: <strong style="color:#17140f">${esc(o.searchName)}</strong>.<br>Ao aceitar, você vê as vagas que o robô encontrar. Seus favoritos e seu Kanban continuam só seus.</div>
+        <div style="margin-top:14px;font-size:15px;line-height:1.6;color:#5a544a">Busca: <strong style="color:#17140f">${esc(o.searchName)}</strong>.<br>Ao aceitar, você vê as vagas que o robô encontrar e recebe as vagas novas por e-mail (dá para desligar). Seus favoritos e seu Kanban continuam só seus.</div>
         <div style="margin-top:22px"><a href="${esc(o.acceptUrl)}" style="display:inline-block;background:#e8501f;color:#ffffff;font-weight:700;font-size:15px;text-decoration:none;padding:13px 26px;border-radius:999px">Ver convite</a></div>
         <div style="margin-top:18px;font-size:12px;color:#8e8779;line-height:1.6">Use o mesmo e-mail que recebeu esta mensagem para entrar. Se você não esperava este convite, é só ignorar.</div>
       </td></tr>

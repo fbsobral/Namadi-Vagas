@@ -1,4 +1,4 @@
-import { disableNotify } from "@/lib/db";
+import { disableMemberNotify, disableNotify } from "@/lib/db";
 import { verifyUnsub } from "@/lib/unsub";
 
 export const dynamic = "force-dynamic";
@@ -14,9 +14,12 @@ const page = (title: string, body: string, status = 200) =>
 async function handle(req: Request) {
   const u = new URL(req.url);
   const s = u.searchParams.get("s") ?? "";
+  const m = u.searchParams.get("m") ?? ""; // convidado
   const t = u.searchParams.get("t") ?? "";
-  if (!s || !t || !verifyUnsub(s, t)) return page("Link inválido", "Este link para parar de receber e-mails não é válido ou expirou.", 400);
-  await disableNotify(s);
+  const valid = !!t && (m ? verifyUnsub(`m:${m}`, t) : !!s && verifyUnsub(s, t));
+  if (!valid) return page("Link inválido", "Este link para parar de receber e-mails não é válido ou expirou.", 400);
+  if (m) await disableMemberNotify(m);
+  else await disableNotify(s);
   return page("Pronto, sem mais e-mails", "Você não receberá mais o resumo desta busca. Dá para ligar de novo quando quiser, editando a busca no painel.");
 }
 
