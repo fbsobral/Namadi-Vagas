@@ -9,6 +9,9 @@ const mono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
 const serif = Instrument_Serif({ variable: "--font-serif", subsets: ["latin"], weight: "400", style: ["normal", "italic"] });
 
 export const metadata: Metadata = {
+  applicationName: "Namadi Vagas",
+  // nome curto e modo "app" ao salvar na tela inicial do iPhone (o título do site é longo e seria cortado)
+  appleWebApp: { capable: true, title: "Namadi Vagas", statusBarStyle: "default" },
   title: "Namadi Vagas — o radar das suas próximas oportunidades",
   description: "Buscas personalizadas de vagas, um robô que vigia o Google por você e os contatos certos no LinkedIn quando você favorita.",
 };
