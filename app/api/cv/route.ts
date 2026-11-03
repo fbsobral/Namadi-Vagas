@@ -12,6 +12,10 @@ export async function POST(req: Request) {
   const userId = await getUserId();
   if (!userId) return Response.json({ error: "Não autenticado" }, { status: 401 });
 
+  // recusa antes de ler o corpo (formData carrega tudo em memória)
+  const declared = Number(req.headers.get("content-length") ?? 0);
+  if (declared > CV_MAX_BYTES + 64 * 1024) return Response.json({ error: "O arquivo passa de 5 MB." }, { status: 413 });
+
   const form = await req.formData().catch(() => null);
   const file = form?.get("file");
   if (!(file instanceof File) || file.size === 0) return Response.json({ error: "Envie um arquivo." }, { status: 400 });

@@ -8,6 +8,7 @@ import { moveJobStage } from "@/app/actions";
 import { STAGES, type StageKey } from "@/lib/stages";
 import { sourceLabel } from "@/lib/sources";
 import { Avatar } from "./avatar";
+import { hrefOf } from "@/lib/safe-url";
 import type { Job } from "@/lib/types";
 
 type Board = Record<StageKey, Job[]>;
@@ -184,7 +185,7 @@ function Card({ job, href, showSearch, dragging, onDragStart, onDragEnd, onMove,
           className="min-h-10 max-w-[190px] cursor-pointer rounded-lg border border-line bg-bg px-2.5 py-1.5 text-sm text-ink-2 outline-none focus:border-accent lg:min-h-0 lg:max-w-[150px] lg:text-xs">
           {STAGES.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
         </select>
-        <a href={job.url} target="_blank" rel="noopener noreferrer" draggable={false} aria-label="Abrir vaga em nova aba" className="grid size-10 place-items-center rounded-full text-ink-3 transition hover:bg-surface-2 hover:text-ink lg:size-7"><ArrowUpRight className="size-4" /></a>
+        <a href={hrefOf(job.url)} target="_blank" rel="noopener noreferrer" draggable={false} aria-label="Abrir vaga em nova aba" className="grid size-10 place-items-center rounded-full text-ink-3 transition hover:bg-surface-2 hover:text-ink lg:size-7"><ArrowUpRight className="size-4" /></a>
       </div>
     </article>
   );

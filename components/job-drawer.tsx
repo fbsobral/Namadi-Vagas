@@ -9,6 +9,7 @@ import { AutoRefresh } from "./auto-refresh";
 import { Avatar } from "./avatar";
 import { FavoriteButton } from "./favorite-button";
 import { JobDescription } from "./job-description";
+import { hrefOf } from "@/lib/safe-url";
 import { timeAgo } from "@/lib/format";
 import { sourceLabel } from "@/lib/sources";
 import type { Contact, ContactRole, Job } from "@/lib/types";
@@ -67,7 +68,7 @@ export function JobDrawer({ job, contacts, closeHref, terms }: { job: Job; conta
           {job.filtered === 1 && job.filtered_reason && <p className="mt-5 rounded-xl bg-accent-soft px-4 py-3 text-sm text-accent">Barrada pelo filtro: {job.filtered_reason}.</p>}
           <JobDescription key={job.id} jobId={job.id} source={job.source} description={job.description} snippet={job.snippet} terms={terms} />
           <div className="mt-5 flex flex-wrap gap-2">
-            <a href={job.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 rounded-full bg-ink px-6 py-2.5 font-medium text-bg transition hover:opacity-85">Abrir vaga <ArrowUpRight className="size-4" /></a>
+            <a href={hrefOf(job.url)} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 rounded-full bg-ink px-6 py-2.5 font-medium text-bg transition hover:opacity-85">Abrir vaga <ArrowUpRight className="size-4" /></a>
             <FavoriteButton jobId={job.id} favorite={fav} label />
           </div>
         </div>
@@ -127,7 +128,7 @@ function ContactCard({ c, job, i }: { c: Contact; job: Job; i: number }) {
         </div>
       </div>
       <div className="mt-3 flex flex-wrap gap-2">
-        <a href={c.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 rounded-full bg-[#0a66c2] px-3.5 py-1.5 text-[13px] font-medium text-white transition hover:opacity-90">
+        <a href={hrefOf(c.url)} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 rounded-full bg-[#0a66c2] px-3.5 py-1.5 text-[13px] font-medium text-white transition hover:opacity-90">
           <span className="rounded-[3px] bg-white px-[3px] text-[10px] leading-[14px] font-extrabold text-[#0a66c2]">in</span> Ver perfil
         </a>
         <button onClick={async () => { await navigator.clipboard.writeText(icebreaker(c, job)); setCopied(true); setTimeout(() => setCopied(false), 1800); }}

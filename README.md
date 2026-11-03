@@ -50,3 +50,12 @@ No editor da busca (dono), **Compartilhar** convida por e-mail. A pessoa vê o c
 
 ## Preencher a busca com o CV
 No formulário da busca, **Preencher com meu currículo** (PDF, DOCX ou TXT, até 5 MB): o Claude (`claude-sonnet-5-5`, saída estruturada validada) lê o CV e sugere nome, grupos de palavras (cargos em português e inglês, senioridade), exclusões, local e até 2 variações que o CV sustente. Tudo fica editável e nada é criado até você confirmar. **O CV não é guardado**: é lido na hora e descartado. Requer `ANTHROPIC_API_KEY`; limite diário por usuário em `CV_DAILY_LIMIT` (padrão 10).
+
+## Segurança
+
+- **Segredos** (`CLERK_SECRET_KEY`, `DATABASE_URL`, `RESEND_API_KEY`, `ANTHROPIC_API_KEY`, `EMAIL_SECRET`, `CRON_SECRET`): no Coolify, **não** marque como "Build variable"; só os `NEXT_PUBLIC_*` precisam existir no build.
+- Em produção use as chaves **Production** do Clerk e defina `EMAIL_SECRET` (aleatório, 32+ caracteres). Sem ele os links de cancelamento de e-mail falham, de propósito.
+- `/api/cron` fica fechado (404) enquanto `CRON_SECRET` não existir; com ele, só responde a `Authorization: Bearer <segredo>`.
+- Links de vagas e contatos só viram clicáveis se forem `http(s)`. Cabeçalhos de segurança (anti-clickjacking, nosniff, HSTS, Referrer/Permissions-Policy) vêm do `next.config.ts`.
+- Limites por conta: 30 buscas, 20 criações/h, 20 convites/dia, 10 e-mails de teste/dia, 40 buscas de contatos/dia, leitura de CV por dia (`CV_DAILY_LIMIT`).
+- O container roda como `pwuser` (não-root).

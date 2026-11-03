@@ -55,6 +55,8 @@ export async function createSearch(input: SearchInput) {
   const userId = await uid();
   const id = randomUUID();
   const count = (await q.listSearches(userId)).length;
+  if (count >= 30) throw new Error("Limite de 30 buscas por conta atingido. Remova alguma antes de criar outra.");
+  await q.rateLimit("create", userId, 20, 3600_000, "Muitas buscas criadas em pouco tempo. Tente de novo em uma hora.");
   const data = sanitize(input);
   const email = data.notify_mode === "off" ? null : await getViewerEmail();
   if (data.notify_mode !== "off" && !email) throw new Error("Seu e-mail principal não está verificado, então não dá para ligar o resumo por e-mail.");
@@ -105,6 +107,7 @@ export async function toggleFavorite(jobId: string, fav: boolean) {
 export async function retryContacts(jobId: string) {
   const userId = await uid();
   if (!(await q.getJob(userId, jobId))) throw new Error("Vaga não encontrada");
+  await q.rateLimit("contacts", userId, 40, 86400_000, "Limite diário de buscas de contatos atingido. Tente amanhã.");
   if (await q.claimContacts(userId, jobId, true)) after(() => findContacts(jobId));
   refresh();
 }
@@ -139,6 +142,7 @@ export async function sendTestEmail(searchId: string) {
   const search = await q.getSearch(userId, searchId);
   if (!search) throw new Error("Busca não encontrada");
   if (!mailConfigured()) throw new Error("O envio de e-mail ainda não está configurado no servidor (RESEND_API_KEY e MAIL_FROM).");
+  await q.rateLimit("testmail", userId, 10, 86400_000, "Limite diário de e-mails de teste atingido. Tente amanhã.");
   const to = await getViewerEmail();
   if (!to) throw new Error("Seu e-mail principal não está verificado.");
 
@@ -166,6 +170,7 @@ export async function ensureDescription(jobId: string) {
   if (!job) throw new Error("Vaga não encontrada");
   if (job.description !== null) return job.description;
   if (job.source !== "linkedin") return "";
+  await q.rateLimit("desc", userId, 120, 3600_000, "Muitas vagas abertas em pouco tempo. Tente de novo em alguns minutos.");
   const text = await linkedinDescription(job.url).catch((e) => {
     throw new Error(/429/.test(String(e)) ? "O LinkedIn limitou as consultas. Tente abrir de novo em alguns minutos." : "Não consegui ler a descrição agora.");
   });
@@ -192,6 +197,7 @@ export async function inviteToSearch(searchId: string, email: string) {
   if (viewer.emails.includes(e)) throw new Error("Esse é o seu próprio e-mail.");
   const search = await q.getSearch(viewer.userId, searchId);
   if (!search) throw new Error("Só quem criou a busca pode convidar.");
+  await q.rateLimit("invite", viewer.userId, 20, 86400_000, "Limite diário de convites atingido. Tente amanhã.");
 
   const { member, created } = await q.inviteMember(viewer.userId, searchId, e, viewer.name);
   let emailed = false;

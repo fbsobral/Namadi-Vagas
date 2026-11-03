@@ -33,6 +33,8 @@ COPY --from=build /app/.next/static ./.next/static
 # O tracing do Next não copia browsers.json & cia.: leva o pacote do Playwright inteiro
 COPY --from=build /app/node_modules/playwright-core ./node_modules/playwright-core
 # O robô abre o Chromium: dê ao container --ipc=host (ou shm_size >= 1gb) se o Chromium cair
+# Roda sem root (usuário que já vem na imagem do Playwright). Se usar volume em BROWSER_PROFILE_DIR, ele precisa ser gravável pelo uid 1000.
+USER pwuser
 EXPOSE 3000
 # Healthcheck rápido: o Coolify libera o novo container assim que responde
 HEALTHCHECK --interval=5s --timeout=3s --start-period=3s --retries=12 \

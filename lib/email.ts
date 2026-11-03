@@ -1,4 +1,5 @@
 import type { DigestJob } from "./db";
+import { hrefOf } from "./safe-url";
 import { sourceLabel } from "./sources";
 
 const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -25,11 +26,11 @@ export function renderDigest(o: {
       <tr><td style="padding:0 0 10px 0">
         <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#ffffff;border:1px solid #e5dfd1;border-radius:16px">
           <tr><td style="padding:16px 18px">
-            <a href="${esc(j.url)}" style="font-size:16px;line-height:1.35;font-weight:700;color:#17140f;text-decoration:none">${esc(j.title)}</a>
+            <a href="${esc(hrefOf(j.url))}" style="font-size:16px;line-height:1.35;font-weight:700;color:#17140f;text-decoration:none">${esc(j.title)}</a>
             <div style="margin-top:4px;font-size:14px;color:#5a544a">${esc(j.company)}${j.location ? ` · ${esc(j.location)}` : ""}</div>
             <div style="margin-top:10px">
               <span style="display:inline-block;background:#efebe2;color:#5a544a;font-size:12px;font-weight:600;padding:3px 10px;border-radius:999px">${esc(sourceLabel(j.source))}</span>
-              <a href="${esc(j.url)}" style="float:right;font-size:13px;font-weight:600;color:#e8501f;text-decoration:none">Ver vaga →</a>
+              <a href="${esc(hrefOf(j.url))}" style="float:right;font-size:13px;font-weight:600;color:#e8501f;text-decoration:none">Ver vaga →</a>
             </div>
           </td></tr>
         </table>

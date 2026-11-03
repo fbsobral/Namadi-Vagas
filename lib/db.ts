@@ -1,6 +1,7 @@
 import "server-only";
 import { randomBytes, randomUUID } from "node:crypto";
 import { Pool, types } from "pg";
+import { safeUrl } from "./safe-url";
 import type { Contact, Job, Search } from "./types";
 
 // BIGINT (timestamps em ms) e COUNT() voltam como número em vez de string.
@@ -292,6 +293,17 @@ export const listRuns = (searchId: string, limit = 8) =>
 
 export const setKv = (key: string, value: string) =>
   run("INSERT INTO kv (key,value,updated_at) VALUES (?,?,?) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value, updated_at=EXCLUDED.updated_at", key, value, Date.now());
+/** Limite por usuário numa janela de tempo (contador no kv). Lança erro quando passa de `max`. */
+export async function rateLimit(name: string, userId: string, max: number, windowMs: number, msg: string) {
+  const key = `rl:${name}:${userId}:${Math.floor(Date.now() / windowMs)}`;
+  const r = await get<{ n: number }>(
+    `INSERT INTO kv (key,value,updated_at) VALUES (?, '1', ?)
+     ON CONFLICT (key) DO UPDATE SET value=(kv.value::int+1)::text, updated_at=EXCLUDED.updated_at RETURNING value::int AS n`,
+    key, Date.now(),
+  );
+  if ((r?.n ?? 1) > max) throw new Error(msg);
+}
+
 export const getKv = (key: string) => get<{ value: string; updated_at: number }>("SELECT value, updated_at FROM kv WHERE key=?", key);
 
 export const logRun = (searchId: string, startedAt: number, newCount: number, total: number, error: string | null, raw = 0, note: string | null = null) =>
@@ -385,6 +397,9 @@ export const getJob = (userId: string, id: string) =>
 export const getJobById = (id: string) => get<Job>("SELECT * FROM jobs WHERE id=?", id);
 
 export async function insertJob(j: Pick<Job, "id" | "user_id" | "search_id" | "title" | "company" | "url" | "source" | "snippet" | "location"> & { description?: string | null; filtered_reason?: string | null }) {
+  const url = safeUrl(j.url);
+  if (!url) return false; // só http(s)
+  j = { ...j, url };
   const r = await run(
     `INSERT INTO jobs (id,user_id,search_id,title,company,url,source,snippet,location,found_at,description,filtered,filtered_reason)
      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT (search_id, url) DO NOTHING`,
@@ -637,7 +652,7 @@ export const listContacts = (jobId: string) =>
 export const clearContacts = (jobId: string) => run("DELETE FROM contacts WHERE job_id=?", jobId);
 
 export const insertContact = (c: Omit<Contact, "found_at">) =>
-  run(
+  !safeUrl(c.url) ? Promise.resolve(null) : run(
     `INSERT INTO contacts (id,job_id,user_id,name,headline,url,snippet,role,score,found_at) VALUES (?,?,?,?,?,?,?,?,?,?)
      ON CONFLICT (job_id, url) DO NOTHING`,
     c.id, c.job_id, c.user_id, c.name, c.headline, c.url, c.snippet, c.role, c.score, Date.now(),
