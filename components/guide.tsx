@@ -6,6 +6,7 @@ import {
   ArrowRightLeft, BookOpen, Bot, Check, ChevronLeft, ChevronRight, CircleCheck, CircleHelp, Clock, Columns3, Copy, Eye, Funnel,
   LayoutList, Lightbulb, LogOut, Mail, Radar, RotateCcw, Search, Share2, Smartphone, Sparkles, Star, Users, X,
 } from "lucide-react";
+import { GuideVisual } from "./guide-visuals";
 import { GUIDES, MODULE_GUIDES, type GuideId, type IconKey } from "@/lib/onboarding";
 
 export const ICONS: Record<IconKey, React.ComponentType<{ className?: string }>> = {
@@ -108,8 +109,6 @@ export function GuideSheet({ id, onClose, finalAction }: {
   const titleId = useId();
   const primary = useRef<HTMLButtonElement>(null);
   const touch = useRef<{ x: number; y: number } | null>(null);
-  const Icon = ICONS[step.icon];
-
   const next = () => (last ? (finalAction ? finalAction.run() : onClose()) : setI((n) => n + 1));
   const prev = () => setI((n) => Math.max(0, n - 1));
 
@@ -151,16 +150,8 @@ export function GuideSheet({ id, onClose, finalAction }: {
           ))}
         </div>
 
-        <div key={i} className="anim-rise flex-1 px-5 pt-6 pb-2 sm:px-7 sm:pt-8" aria-live="polite">
-          <div className="relative mb-6 grid h-32 place-items-center overflow-hidden rounded-3xl bg-accent-soft/60 sm:h-36">
-            <svg aria-hidden className="absolute size-[300px] text-accent" viewBox="0 0 300 300">
-              {[140, 105, 70].map((r) => <circle key={r} cx="150" cy="150" r={r} fill="none" stroke="currentColor" strokeOpacity=".18" />)}
-              <g style={{ transformOrigin: "150px 150px", animation: "spin 7s linear infinite" }}>
-                <path d="M150 150 L150 10 A140 140 0 0 1 271 80 Z" fill="currentColor" fillOpacity=".1" />
-              </g>
-            </svg>
-            <span className="relative grid size-16 place-items-center rounded-2xl bg-accent text-accent-ink shadow-pop"><Icon className="size-8" /></span>
-          </div>
+        <div key={i} className="anim-rise flex-1 px-5 pt-5 pb-2 sm:px-7 sm:pt-6" aria-live="polite">
+          <div className="mb-5 sm:mb-6"><GuideVisual name={step.visual} /></div>
           <h2 id={titleId} className="font-display text-[2rem] leading-[1.05] sm:text-4xl">{step.title}</h2>
           <p className="mt-3 text-[15px] leading-relaxed text-ink-2">{step.body}</p>
           {step.bullets && (
