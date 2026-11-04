@@ -9,6 +9,7 @@ import { AutoRefresh } from "./auto-refresh";
 import { Avatar } from "./avatar";
 import { FavoriteButton } from "./favorite-button";
 import { JobDescription } from "./job-description";
+import { HelpButton, ModuleTip } from "./guide";
 import { hrefOf } from "@/lib/safe-url";
 import { timeAgo } from "@/lib/format";
 import { sourceLabel } from "@/lib/sources";
@@ -48,12 +49,14 @@ export function JobDrawer({ job, contacts, closeHref, terms }: { job: Job; conta
       <Link href={closeHref} scroll={false} aria-label="Fechar" className="anim-fade absolute inset-0 bg-ink/45 backdrop-blur-[2px]" />
       <aside role="dialog" aria-label={job.title} className="anim-slide scroll-thin absolute inset-y-0 right-0 flex w-full max-w-[560px] flex-col overflow-y-auto border-l border-line bg-bg shadow-pop">
         <AutoRefresh active={pending} every={2000} />
-        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-line bg-bg/90 px-6 py-3 backdrop-blur">
+        <div className="pt-safe sticky top-0 z-10 flex items-center gap-1 border-b border-line bg-bg/90 px-5 py-2 backdrop-blur sm:px-6 sm:py-3">
           <span className="text-xs font-medium tracking-wider text-ink-3 uppercase">Detalhes da vaga</span>
+          <HelpButton id="job" className="ml-auto size-11 sm:size-9" />
           <Link href={closeHref} scroll={false} className="grid size-11 place-items-center rounded-full hover:bg-surface-2 sm:size-9" aria-label="Fechar"><X className="size-5" /></Link>
         </div>
 
         <div className="px-5 pt-6 pb-4 sm:px-6">
+          <ModuleTip id="job" className="mb-6" />
           <Avatar name={job.company} size={64} />
           <h2 className="font-display mt-5 text-3xl leading-[1.05] sm:text-4xl">{job.title}</h2>
           <p className="mt-2 flex flex-wrap items-center gap-x-3 text-ink-2">

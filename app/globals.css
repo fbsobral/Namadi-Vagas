@@ -114,3 +114,4 @@ body::before {
 .pt-safe { padding-top: env(safe-area-inset-top); }
 html { -webkit-text-size-adjust: 100%; }
 button, a, select { -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+@media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }

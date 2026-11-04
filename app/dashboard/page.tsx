@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { getUserId, getViewer } from "@/lib/auth";
 import { UserButton } from "@clerk/nextjs";
 import { AlertTriangle, Columns3, LayoutList, Radar as RadarIcon, Star } from "lucide-react";
-import { boardCounts, filteredCount, getJob, getKv, pendingInvitesFor, jobCounts, listContacts, listJobs, listRuns, listSearches, type JobFilter } from "@/lib/db";
+import { boardCounts, filteredCount, getJob, getKv, getSeenGuides, pendingInvitesFor, jobCounts, listContacts, listJobs, listRuns, listSearches, type JobFilter } from "@/lib/db";
 import { isDemoMode } from "@/lib/serp";
 import { freqLabel, sourceLabel } from "@/lib/sources";
 import { includeTerms, parseSpec, specToBoolean } from "@/lib/query";
@@ -17,6 +17,8 @@ import { AutoRefresh } from "@/components/auto-refresh";
 import { RobotStatus, RunHistory } from "@/components/robot-status";
 import { NewSearchButton } from "@/components/new-search-button";
 import { KanbanBoard } from "@/components/kanban-board";
+import { OnboardingProvider } from "@/components/onboarding";
+import { HelpButton, ModuleTip } from "@/components/guide";
 
 export const dynamic = "force-dynamic";
 
@@ -26,7 +28,7 @@ export default async function Dashboard({ searchParams }: PageProps<"/dashboard"
   const sp = await searchParams;
   const one = (k: string) => (typeof sp[k] === "string" ? (sp[k] as string) : null);
 
-  const [searches, counts, viewer] = await Promise.all([listSearches(userId), jobCounts(userId), getViewer()]);
+  const [searches, counts, viewer, seenGuides] = await Promise.all([listSearches(userId), jobCounts(userId), getViewer(), getSeenGuides(userId)]);
   const invites = await pendingInvitesFor(viewer?.emails ?? []);
   const current = searches.find((s) => s.id === one("s")) ?? null;
   const view = one("v") === "board" ? "board" : "list";
@@ -63,8 +65,10 @@ export default async function Dashboard({ searchParams }: PageProps<"/dashboard"
   const anyRunning = searches.some((s) => s.last_status === "running" || (s.active === 1 && s.last_run_at == null && isFresh(s.created_at, 5 * 60_000)));
   const title = current ? current.name : view === "board" ? "Kanban" : filter === "fav" ? "Favoritas" : "Todas as vagas";
   const sources = current ? (JSON.parse(current.sources) as string[]) : [];
+  const guide = view === "board" ? "board" : current?.is_owner === false ? "shared" : "list";
 
   return (
+    <OnboardingProvider seen={seenGuides} hasSearches={searches.length > 0}>
     <div className="relative z-10 flex min-h-dvh flex-col lg:flex-row">
       <AutoRefresh active={anyRunning} />
       <Sidebar searches={searches} counts={counts} currentId={current?.id ?? null} filter={filter} view={view} robotOnline={isFresh(beat?.updated_at, 3 * 60_000)}>
@@ -93,7 +97,10 @@ export default async function Dashboard({ searchParams }: PageProps<"/dashboard"
               {current && <span className="size-2.5 rounded-full" style={{ background: current.color }} />}
               {current ? (current.active ? <span className="inline-flex items-center gap-1.5">robô {current.last_status === "running" ? "buscando agora…" : `ativo · ${freqLabel(current.freq_minutes)}`}</span> : "pausada") : "visão geral"}
             </div>
-            <h1 className="font-display mt-1 text-4xl leading-none break-words sm:text-6xl">{title}</h1>
+            <div className="mt-1 flex items-start gap-2">
+              <h1 className="font-display min-w-0 flex-1 text-4xl leading-none break-words sm:text-6xl">{title}</h1>
+              {searches.length > 0 && <HelpButton id={guide} className="mt-0.5 border border-line bg-surface sm:mt-2" />}
+            </div>
             {current ? (
               <>
                 <p className="mt-3 max-w-2xl font-mono text-[13px] leading-relaxed text-ink-3">{specToBoolean(parseSpec(current.query_spec, current.query))}{current.location ? ` · ${current.location}` : ""} · {sources.map(sourceLabel).join(", ")}</p>
@@ -108,6 +115,8 @@ export default async function Dashboard({ searchParams }: PageProps<"/dashboard"
               <p className="mt-3 text-ink-2">{view === "board" ? `${counts.favs} ${counts.favs === 1 ? "vaga" : "vagas"} no quadro, de todas as suas buscas` : `${counts.total} vagas · ${counts.unseen} novas · ${counts.favs} favoritas`}</p>
             )}
           </header>
+
+          {searches.length > 0 && <ModuleTip id={guide} className="mt-6" />}
 
           <div className="mt-6 flex items-end justify-between gap-2 border-b border-line sm:mt-8">
             {view === "list" ? (
@@ -143,6 +152,7 @@ export default async function Dashboard({ searchParams }: PageProps<"/dashboard"
 
       {drawerJob && <JobDrawer job={drawerJob} contacts={contacts} closeHref={base()} terms={drawerSearch ? includeTerms(parseSpec(drawerSearch.query_spec, drawerSearch.query)) : []} />}
     </div>
+    </OnboardingProvider>
   );
 }
 

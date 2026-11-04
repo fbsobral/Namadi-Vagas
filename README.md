@@ -59,3 +59,6 @@ No formulário da busca, **Preencher com meu currículo** (PDF, DOCX ou TXT, at�
 - Links de vagas e contatos só viram clicáveis se forem `http(s)`. Cabeçalhos de segurança (anti-clickjacking, nosniff, HSTS, Referrer/Permissions-Policy) vêm do `next.config.ts`.
 - Limites por conta: 30 buscas, 20 criações/h, 20 convites/dia, 10 e-mails de teste/dia, 40 buscas de contatos/dia, leitura de CV por dia (`CV_DAILY_LIMIT`).
 - O container roda como `pwuser` (não-root).
+
+## Onboarding e guias
+Na primeira visita ao painel abre um **tour de boas-vindas** (7 passos; termina com "Criar minha primeira busca" para quem ainda não tem nenhuma). Cada módulo — **editor de busca, lista de vagas, detalhes da vaga, Kanban, compartilhar e busca compartilhada comigo** — mostra um aviso "Primeira vez aqui?" até a pessoa abrir ou dispensar o guia dele. O botão **?** de cada tela reabre o guia correspondente e **Ajuda e guias** (menu lateral ou topo no celular) lista todos, com a opção de mostrar as dicas de novo. O que cada pessoa já viu fica no banco (`kv`, chave `onb:<userId>`), então vale em qualquer aparelho. O conteúdo dos guias está em `lib/onboarding.ts`.

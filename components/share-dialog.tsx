@@ -7,6 +7,7 @@ import { Check, Copy, Link2, Mail, UserPlus, X } from "lucide-react";
 import { getShareInfo, inviteToSearch, removeMemberAction } from "@/app/actions";
 import { Avatar } from "./avatar";
 import type { Member } from "@/lib/db";
+import { HelpButton, ModuleTip } from "./guide";
 
 export function ShareDialog({ searchId, searchName, onClose }: { searchId: string; searchName: string; onClose: () => void }) {
   const router = useRouter();
@@ -60,9 +61,13 @@ export function ShareDialog({ searchId, searchName, onClose }: { searchId: strin
     <div className="fixed inset-0 z-50 grid place-items-end sm:place-items-center">
       <div className="anim-fade absolute inset-0 bg-ink/50 backdrop-blur-sm" onClick={onClose} />
       <div role="dialog" aria-label="Compartilhar busca" className="anim-pop scroll-thin pb-safe relative max-h-[92dvh] w-full max-w-lg overflow-y-auto rounded-t-[28px] border border-line bg-surface p-6 text-left shadow-pop sm:rounded-[28px] sm:p-8">
-        <button type="button" onClick={onClose} aria-label="Fechar" className="absolute top-5 right-5 grid size-9 place-items-center rounded-full text-ink-3 transition hover:bg-surface-2 hover:text-ink"><X className="size-5" /></button>
+        <div className="absolute top-4 right-4 flex items-center gap-0.5 sm:top-5 sm:right-5">
+          <HelpButton id="share" className="size-10 sm:size-9" />
+          <button type="button" onClick={onClose} aria-label="Fechar" className="grid size-10 place-items-center rounded-full text-ink-3 transition hover:bg-surface-2 hover:text-ink sm:size-9"><X className="size-5" /></button>
+        </div>
         <p className="text-xs font-medium tracking-wider text-accent uppercase">Compartilhar</p>
-        <h2 className="font-display mt-1 pr-10 text-3xl sm:text-4xl">{searchName}</h2>
+        <h2 className="font-display mt-1 pr-20 text-3xl sm:text-4xl">{searchName}</h2>
+        <ModuleTip id="share" className="mt-4" />
         <p className="mt-2 text-sm text-ink-2">Quem aceitar o convite vê as vagas que o robô encontrar nesta busca e <strong className="font-medium text-ink">recebe as vagas novas por e-mail</strong> (cada pessoa pode desligar). Favoritos e Kanban continuam individuais. Só você edita, pausa e exclui.</p>
 
         <form onSubmit={invite} className="mt-6 flex gap-2">

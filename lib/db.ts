@@ -657,3 +657,19 @@ export const insertContact = (c: Omit<Contact, "found_at">) =>
      ON CONFLICT (job_id, url) DO NOTHING`,
     c.id, c.job_id, c.user_id, c.name, c.headline, c.url, c.snippet, c.role, c.score, Date.now(),
   );
+
+/* ---------- onboarding (guias já vistos, por pessoa) ---------- */
+
+export async function getSeenGuides(userId: string): Promise<string[]> {
+  const r = await getKv(`onb:${userId}`);
+  try { const v = JSON.parse(r?.value ?? "[]"); return Array.isArray(v) ? v.filter((x) => typeof x === "string") : []; } catch { return []; }
+}
+
+export async function addSeenGuide(userId: string, id: string) {
+  const seen = new Set(await getSeenGuides(userId));
+  if (seen.has(id)) return;
+  seen.add(id);
+  await setKv(`onb:${userId}`, JSON.stringify([...seen]));
+}
+
+export const resetSeenGuides = (userId: string) => setKv(`onb:${userId}`, "[]");

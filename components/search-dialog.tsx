@@ -10,6 +10,7 @@ import { emptySpec, hasTerms, parseSpec, specToBoolean, specToQuery } from "@/li
 import { QueryBuilder } from "./query-builder";
 import { EmailSettings } from "./email-settings";
 import { CvFill } from "./cv-fill";
+import { HelpButton, ModuleTip } from "./guide";
 import type { Search } from "@/lib/types";
 
 export function SearchDialog({ open, onClose, initial }: { open: boolean; onClose: () => void; initial?: Search | null }) {
@@ -65,9 +66,13 @@ function DialogBody({ onClose, initial }: { onClose: () => void; initial?: Searc
     <div className="fixed inset-0 z-50 grid place-items-end sm:place-items-center">
       <div className="anim-fade absolute inset-0 bg-ink/50 backdrop-blur-sm" onClick={onClose} />
       <form onSubmit={submit} className="anim-pop scroll-thin relative max-h-[94dvh] w-full max-w-2xl overflow-y-auto rounded-t-[28px] border border-line bg-surface px-5 pt-6 text-left shadow-pop sm:rounded-[28px] sm:px-8 sm:pt-8">
-        <button type="button" onClick={onClose} aria-label="Fechar" className="absolute top-5 right-5 grid size-9 place-items-center rounded-full text-ink-3 transition hover:bg-surface-2 hover:text-ink"><X className="size-5" /></button>
+        <div className="absolute top-4 right-4 flex items-center gap-0.5 sm:top-5 sm:right-5">
+          <HelpButton id="search" className="size-10 sm:size-9" />
+          <button type="button" onClick={onClose} aria-label="Fechar" className="grid size-10 place-items-center rounded-full text-ink-3 transition hover:bg-surface-2 hover:text-ink sm:size-9"><X className="size-5" /></button>
+        </div>
         <p className="text-xs font-medium tracking-wider text-accent uppercase">{initial ? "Editar busca" : "Nova busca"}</p>
-        <h2 className="font-display mt-1 pr-10 text-3xl sm:text-4xl">{initial ? "Ajuste o radar" : "O que você procura?"}</h2>
+        <h2 className="font-display mt-1 pr-20 text-3xl sm:text-4xl">{initial ? "Ajuste o radar" : "O que você procura?"}</h2>
+        <ModuleTip id="search" className="mt-5" />
 
         <CvFill
           canUndo={before !== null}

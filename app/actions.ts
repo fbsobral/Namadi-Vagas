@@ -14,6 +14,7 @@ import { linkedinDescription } from "@/lib/providers";
 import { PALETTE, SOURCES } from "@/lib/sources";
 import { isStage } from "@/lib/stages";
 import { cleanSpec, specToQuery, type QuerySpec } from "@/lib/query";
+import { isGuideId } from "@/lib/onboarding";
 
 export type SearchInput = {
   name: string;
@@ -246,5 +247,19 @@ export async function declineInviteAction(memberId: string) {
   const viewer = await getViewer();
   if (!viewer) throw new Error("Não autenticado");
   await q.declineInvite(viewer.emails, memberId);
+  refresh();
+}
+
+/* ---------- onboarding ---------- */
+
+export async function markGuideSeen(id: string) {
+  const userId = await uid();
+  if (!isGuideId(id)) return;
+  await q.addSeenGuide(userId, id);
+}
+
+export async function resetGuides() {
+  const userId = await uid();
+  await q.resetSeenGuides(userId);
   refresh();
 }

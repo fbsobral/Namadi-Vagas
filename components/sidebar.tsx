@@ -2,9 +2,10 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Menu, Plus, Star, Layers, X, Columns3 } from "lucide-react";
+import { Menu, Plus, Star, Layers, X, Columns3, CircleHelp } from "lucide-react";
 import { Logo } from "./logo";
 import { SearchDialog } from "./search-dialog";
+import { useGuides } from "./guide";
 import { freqLabel } from "@/lib/sources";
 import type { Search } from "@/lib/types";
 
@@ -21,6 +22,8 @@ type Props = {
 export function Sidebar({ searches, counts, currentId, filter, view = "list", robotOnline, children }: Props) {
   const [mobile, setMobile] = useState(false);
   const [dialog, setDialog] = useState(false);
+  const guides = useGuides();
+  const unseenGuides = guides ? ["welcome", "search", "list", "job", "board", "share"].filter((g) => !guides.seen.has(g)).length : 0;
   const mine = searches.filter((s) => s.is_owner !== false);
   const shared = searches.filter((s) => s.is_owner === false);
   const allActive = !currentId && view === "list" && filter !== "fav";
@@ -63,7 +66,18 @@ export function Sidebar({ searches, counts, currentId, filter, view = "list", ro
         )}
       </div>
 
-      <div className="flex items-center gap-3 border-t border-line px-5 py-4">{children}</div>
+      {guides && (
+        <div className="px-3 pb-2">
+          <button type="button" onClick={() => { setMobile(false); guides.openHelp(); }}
+            className="flex min-h-11 w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-ink-2 transition hover:bg-surface/60 hover:text-ink">
+            <CircleHelp className="size-4" />
+            <span className="flex-1 text-left">Ajuda e guias</span>
+            {unseenGuides > 0 && <span className="rounded-full bg-accent-soft px-1.5 py-0.5 text-[11px] leading-none font-semibold text-accent">{unseenGuides}</span>}
+          </button>
+        </div>
+      )}
+
+      <div className="pb-safe flex items-center gap-3 border-t border-line px-5 py-4">{children}</div>
     </div>
   );
 
@@ -75,6 +89,7 @@ export function Sidebar({ searches, counts, currentId, filter, view = "list", ro
           <span className={`size-2 rounded-full ${robotOnline ? "pulse-dot bg-ok" : "bg-accent"}`} style={{ ["--dot" as string]: robotOnline ? "var(--ok)" : "var(--accent)" }} />
           {robotOnline ? "online" : "parado"}
         </span>
+        {guides && <button onClick={() => guides.openHelp()} aria-label="Ajuda e guias" className="grid size-11 place-items-center rounded-full text-ink-2"><CircleHelp className="size-5" /></button>}
         <button onClick={() => setMobile(true)} aria-label="Abrir menu" className="grid size-11 place-items-center rounded-full border border-line bg-surface"><Menu className="size-5" /></button>
       </div>
 
