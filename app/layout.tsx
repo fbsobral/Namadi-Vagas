@@ -13,7 +13,7 @@ export const metadata: Metadata = {
   // nome curto e modo "app" ao salvar na tela inicial do iPhone (o título do site é longo e seria cortado)
   appleWebApp: { capable: true, title: "Namadi Vagas", statusBarStyle: "default" },
   title: "Namadi Vagas — o radar das suas próximas oportunidades",
-  description: "Buscas personalizadas de vagas, um robô que vigia o Google por você e os contatos certos no LinkedIn quando você favorita.",
+  description: "Buscas de vagas que rodam sozinhas, currículo com nota e sugestões de IA, % de compatibilidade com cada vaga, carta de apresentação, contatos no LinkedIn e Kanban de candidaturas.",
 };
 
 export const viewport: Viewport = {

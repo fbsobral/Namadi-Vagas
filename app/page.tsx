@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { auth } from "@clerk/nextjs/server";
 import {
-  ArrowUpRight, Bell, Bot, Check, ChevronDown, Copy, Funnel, GripVertical, History, Mail, RefreshCw, Search, Share2, ShieldCheck, Sparkles, Star,
+  ArrowUpRight, Bell, Bot, Check, ChevronDown, Copy, FileText, Funnel, GripVertical, History, Mail, RefreshCw, Search, Share2, ShieldCheck, Sparkles, Star,
 } from "lucide-react";
 import { Logo } from "@/components/logo";
 import { StickyCta } from "@/components/sticky-cta";
@@ -49,7 +49,7 @@ export default async function Home() {
             <a href="#como" className="rounded-full border border-line bg-surface px-6 py-4 font-medium transition hover:bg-surface-2 sm:py-3.5">Como funciona</a>
           </div>
           <ul className="anim-rise mx-auto mt-8 flex max-w-2xl flex-wrap justify-center gap-x-5 gap-y-2 text-[13px] text-ink-3" style={{ animationDelay: ".22s" }}>
-            {["Até 30 buscas por conta", "De 30 min a semanal", "Resumo por e-mail", "Funciona no celular"].map((t) => (
+            {["Currículo com nota e IA", "% de compatibilidade por vaga", "Resumo por e-mail", "Busca em equipe", "Funciona no celular"].map((t) => (
               <li key={t} className="inline-flex items-center gap-1.5"><Check className="size-3.5 text-accent" />{t}</li>
             ))}
           </ul>
@@ -59,13 +59,14 @@ export default async function Home() {
 
         {/* ---------- como funciona ---------- */}
         <section id="como" className="mx-auto max-w-6xl scroll-mt-24 px-4 pt-24 sm:px-5 sm:pt-28">
-          <SectionHead kicker="Como funciona" title={<>Três passos e o radar <em className="text-accent">roda sozinho</em>.</>}
+          <SectionHead kicker="Como funciona" title={<>Quatro passos e o radar <em className="text-accent">roda sozinho</em>.</>}
             text="Você configura uma vez. Depois é só abrir o painel (ou o e-mail) para ver o que chegou." />
-          <ol className="mt-12 grid gap-4 md:grid-cols-3">
+          <ol className="mt-12 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
             {[
               { i: Search, t: "Diga o que procura", d: "Cargos combinados com E/OU, local, fontes e o que excluir. Ou envie o currículo e a IA sugere a busca pronta para você revisar." },
               { i: Bot, t: "O robô vigia por você", d: "Na frequência que você escolher, ele lê LinkedIn, Gupy e o Google, descarta repetidas e marca como NOVA só o que é inédito." },
-              { i: Star, t: "Favorite e avance", d: "Cada favorita ganha recrutadores, lideranças e pessoas do time para conhecer, e entra no seu Kanban de candidaturas." },
+              { i: FileText, t: "Veja o quanto combina", d: "Envie seu currículo uma vez: ele ganha nota e sugestões, e cada vaga mostra a % de compatibilidade com você." },
+              { i: Star, t: "Favorite e avance", d: "Cada favorita ganha contatos no LinkedIn, carta de apresentação e um lugar no seu Kanban de candidaturas." },
             ].map(({ i: Icon, t, d }, n) => (
               <li key={t} className="relative rounded-3xl border border-line bg-surface p-6 shadow-card sm:p-7">
                 <div className="mb-8 flex items-center justify-between sm:mb-10">
@@ -95,7 +96,7 @@ export default async function Home() {
               </div>
             </Feature>
 
-            <Feature className="md:col-span-2" icon={Sparkles} title="Preencha com seu CV" text="Envie PDF, DOCX ou TXT e a IA sugere cargos em português e inglês, senioridade, exclusões e local. Você revisa antes de criar.">
+            <Feature className="md:col-span-2" icon={Sparkles} title="Busca a partir do CV" text="Na hora de criar uma busca, envie o currículo e a IA sugere cargos em português e inglês, senioridade, exclusões e local. Você revisa antes de criar.">
               <p className="mt-5 inline-flex items-center gap-2 rounded-full bg-ok-soft px-3 py-1.5 text-xs font-medium text-ok"><ShieldCheck className="size-4" /> O currículo é lido e descartado</p>
             </Feature>
 
@@ -125,13 +126,19 @@ export default async function Home() {
               </div>
             </Feature>
 
-            <Feature className="md:col-span-3" icon={Share2} title="Busque junto" text="Compartilhe uma busca por e-mail com quem também está procurando. Cada pessoa tem suas favoritas, seu Kanban e escolhe como receber os e-mails. Você decide quem só vê, quem pode editar e quem pode convidar.">
-              <div className="mt-5 flex items-center">
-                {["MA", "RC", "CD"].map((n, i) => (
-                  <span key={n} className="-ml-2 grid size-9 place-items-center rounded-full border-2 border-surface text-xs font-semibold text-white first:ml-0" style={{ background: ["#2F6BFF", "#14A37F", "#A855F7"][i] }}>{n}</span>
+            <Feature className="md:col-span-3" icon={Share2} title="Busque em equipe" text="Compartilhe uma busca por e-mail e escolha o nível de cada pessoa: só ver, editar a busca ou também convidar. Favoritas, Kanban e e-mails continuam individuais. Convite não chegou? Reenvie com um toque.">
+              <ul className="mt-5 space-y-2">
+                {[["MA", "Marina", "#2F6BFF", "Pode editar", "Ativo"], ["RC", "Rafael", "#14A37F", "Pode ver", "Ativo"], ["CD", "camila@email.com", "#A855F7", "Pode gerenciar", "Pendente"]].map(([i, n, c, lvl, st]) => (
+                  <li key={i} className="flex min-w-0 items-center gap-2.5 rounded-2xl border border-line bg-bg/60 px-3 py-2">
+                    <span className="grid size-8 shrink-0 place-items-center rounded-full text-[11px] font-semibold text-white" style={{ background: c }}>{i}</span>
+                    <span className="min-w-0 flex-1 truncate text-sm font-medium">{n}</span>
+                    <span className="shrink-0 rounded-full border border-line bg-surface px-2 py-1 text-[11px] font-medium whitespace-nowrap sm:px-2.5">{lvl}</span>
+                    {st === "Pendente"
+                      ? <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-line px-2.5 py-1 text-[11px] font-medium"><RefreshCw className="size-3" /> Reenviar</span>
+                      : <span className="hidden shrink-0 rounded-full bg-ok-soft px-2 py-0.5 text-[11px] font-semibold text-ok sm:inline">{st}</span>}
+                  </li>
                 ))}
-                <span className="ml-3 text-sm text-ink-2">seguindo “Design Lead”</span>
-              </div>
+              </ul>
             </Feature>
           </div>
         </section>
@@ -191,7 +198,7 @@ export default async function Home() {
             <h2 className="font-display text-[clamp(2.4rem,7vw,5.5rem)] leading-[0.98]">
               Sua próxima vaga já foi publicada. <em className="opacity-80">Falta o robô te avisar.</em>
             </h2>
-            <p className="mx-auto mt-6 max-w-xl text-lg opacity-85">Crie sua primeira busca em um minuto. Um tour rápido te mostra o resto assim que você entrar.</p>
+            <p className="mx-auto mt-6 max-w-xl text-lg opacity-85">Crie sua primeira busca em um minuto e envie seu currículo para ver o quanto cada vaga combina com você. Um tour rápido mostra o resto assim que você entrar.</p>
             <div className="mt-10 flex flex-col items-stretch justify-center gap-3 sm:flex-row sm:items-center">
               <Link href={cta.href} className="group inline-flex items-center justify-center gap-2 rounded-full bg-ink px-8 py-4 font-medium text-bg shadow-pop transition hover:-translate-y-0.5">
                 {cta.label} <ArrowUpRight className="size-4 transition group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
@@ -207,6 +214,8 @@ export default async function Home() {
         <nav aria-label="Rodapé" className="flex flex-wrap gap-x-5 gap-y-2">
           <a href="#como" className="hover:text-ink">Como funciona</a>
           <a href="#recursos" className="hover:text-ink">Recursos</a>
+          <a href="#curriculo" className="hover:text-ink">Currículo</a>
+          <a href="#kanban" className="hover:text-ink">Kanban</a>
           <a href="#perguntas" className="hover:text-ink">Perguntas</a>
           {!userId && <Link href="/sign-in" className="hover:text-ink">Entrar</Link>}
         </nav>
@@ -259,15 +268,16 @@ function Op({ children, strong }: { children: React.ReactNode; strong?: boolean 
 
 function Preview() {
   const jobs = [
-    { c: "Nubank", t: "Product Designer Sênior", m: "Remoto · Brasil", s: "LinkedIn", col: "#A855F7", fav: true, n: true },
-    { c: "QuintoAndar", t: "Design Lead, Growth", m: "São Paulo, SP", s: "Google aberto", col: "#2F6BFF", n: true },
-    { c: "Hotmart", t: "UX Researcher Pleno", m: "Belo Horizonte, MG", s: "Gupy", col: "#14A37F" },
+    { c: "Nubank", t: "Product Designer Sênior", m: "Remoto · Brasil", s: "LinkedIn", col: "#A855F7", fav: true, n: true, fit: 96 },
+    { c: "QuintoAndar", t: "Design Lead, Growth", m: "São Paulo, SP", s: "Google aberto", col: "#2F6BFF", n: true, fit: 74 },
+    { c: "Hotmart", t: "UX Researcher Pleno", m: "Belo Horizonte, MG", s: "Gupy", col: "#14A37F", fit: 0 },
   ];
   return (
     <div className="anim-rise relative mx-auto max-w-5xl px-4 sm:px-5" style={{ animationDelay: ".28s" }}>
       <div className="absolute inset-x-10 -top-6 h-40 rounded-full bg-accent/20 blur-3xl" />
       <div className="relative grid grid-cols-1 overflow-hidden rounded-[28px] border border-line bg-surface shadow-pop md:grid-cols-[230px_1fr]">
         <aside className="hidden border-r border-line bg-surface-2/60 p-4 md:block">
+          <div className="mb-5 flex items-center gap-2.5 rounded-xl px-2.5 py-2 text-sm text-ink-2"><FileText className="size-3.5" /> <span className="flex-1 truncate">Currículo</span><span className="rounded-full bg-ok-soft px-1.5 text-[11px] font-semibold text-ok">87</span></div>
           <p className="mb-3 px-2 text-[11px] font-medium tracking-wider text-ink-3 uppercase">Minhas buscas</p>
           {[["Product Design", "#E8501F", 12], ["UX Research · remoto", "#2F6BFF", 4], ["Design Lead", "#14A37F", 0]].map(([n, c, k], i) => (
             <div key={n as string} className={`mb-1 flex items-center gap-2.5 rounded-xl px-2.5 py-2 text-sm ${i === 0 ? "bg-surface shadow-card" : "text-ink-2"}`}>
@@ -299,6 +309,7 @@ function Preview() {
                   <p className="truncate text-sm font-medium sm:text-base">{j.t} {j.n && <span className="ml-1 rounded-full bg-accent-soft px-2 py-0.5 text-[10px] font-semibold text-accent">NOVA</span>}</p>
                   <p className="truncate text-xs text-ink-3 sm:text-sm">{j.c} · {j.m} · {j.s}</p>
                 </div>
+                {j.fit > 0 && <span className={`hidden shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold sm:inline ${j.fit >= 85 ? "bg-ok text-white" : "bg-ok-soft text-ok"}`}>{j.fit}% compatível</span>}
                 <Star className={`size-5 shrink-0 ${j.fav ? "fill-accent text-accent" : "text-ink-3"}`} />
               </div>
             ))}
