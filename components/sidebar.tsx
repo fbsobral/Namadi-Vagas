@@ -6,6 +6,7 @@ import { Menu, Plus, Star, Layers, X, Columns3, CircleHelp, FileText, Settings2 
 import { Logo } from "./logo";
 import { SearchDialog } from "./search-dialog";
 import { useGuides } from "./guide";
+import { guideState } from "@/lib/onboarding";
 import { freqLabel } from "@/lib/sources";
 import type { Search } from "@/lib/types";
 
@@ -24,7 +25,7 @@ export function Sidebar({ searches, counts, currentId, filter, view = "list", ro
   const [mobile, setMobile] = useState(false);
   const [dialog, setDialog] = useState(false);
   const guides = useGuides();
-  const unseenGuides = guides ? ["welcome", "search", "list", "job", "board", "share", "resume"].filter((g) => !guides.seen.has(g)).length : 0;
+  const unseenGuides = guides ? (["welcome", "search", "list", "job", "board", "share", "resume"] as const).filter((g) => guideState(guides.seen, g) !== "seen").length : 0;
   const mine = searches.filter((s) => s.is_owner !== false);
   const shared = searches.filter((s) => s.is_owner === false);
   const allActive = !currentId && view === "list" && filter !== "fav";

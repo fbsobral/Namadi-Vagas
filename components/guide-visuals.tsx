@@ -5,6 +5,7 @@ import {
   ArrowUpRight, Bell, Check, CheckCheck, ChevronDown, Clock, Copy, FileText, LogOut, Mail, MapPin, MousePointer2, Pause, Pencil,
   RefreshCw, Search, Send, Share2, Sparkles, Star, Trash2, UserPlus, X,
 } from "lucide-react";
+import { Building2 } from "lucide-react";
 import type { VisualKey } from "@/lib/onboarding";
 import { Bar, ScoreRing } from "./score-ring";
 
@@ -531,6 +532,69 @@ const V: Record<VisualKey, () => React.ReactNode> = {
             : <span key={i} className="block h-1" />)}
         </div>
         <p className="mt-2 text-[9.5px] text-ink-3">Escrita a partir do seu currículo e dos requisitos da vaga.</p>
+      </Screen>
+    </Frame>
+  ),
+
+  resumeRefine: () => (
+    <Frame>
+      <Screen className="space-y-1.5 !p-2.5">
+        <p className="rounded-lg bg-ok-soft px-2 py-1 text-[9.5px]">- Redesenhei o checkout e reduzi o abandono em [X%]</p>
+        <p className="anim-pop flex justify-end" style={d(0.3)}><span className="max-w-[80%] rounded-xl rounded-br-sm bg-ink px-2 py-1 text-[9.5px] text-bg">Foi 30% em 6 meses, no app iOS e Android</span></p>
+        <p className="anim-pop flex" style={d(0.9)}><span className="max-w-[85%] rounded-xl rounded-bl-sm bg-surface-2 px-2 py-1 text-[9.5px]">Troquei o [X%] por 30% e incluí o prazo.</span></p>
+        <p className="anim-pop rounded-lg bg-ok-soft px-2 py-1 text-[9.5px] ring-2 ring-ok/30" style={d(1.3)}>- Redesenhei o checkout e reduzi o abandono em 30% em 6 meses</p>
+        <div className="flex gap-1"><Btn primary className="g-press"><Check className="size-3" /> Aceitar</Btn><Btn className="!border-accent !bg-accent-soft !text-accent"><Sparkles className="size-3" /> Refinar com a IA</Btn></div>
+      </Screen>
+    </Frame>
+  ),
+
+  fitBulk: () => (
+    <Frame>
+      <div className="relative">
+        <Screen className="space-y-1 !p-2">
+          {[["Head of Growth", 91, true], ["Growth Manager", null, true], ["CRM Lead", null, true], ["Director, Growth", 34, false]].map(([t, v, sel], k) => (
+            <div key={t as string} className={`anim-pop flex items-center gap-1.5 rounded-lg border px-1.5 py-1 ${sel ? "border-accent/50 bg-accent-soft/50" : "border-line bg-bg/70"}`} style={d(k * 0.1)}>
+              <span className={`grid size-3.5 place-items-center rounded-[3px] border ${sel ? "border-accent bg-accent text-accent-ink" : "border-ink-3"}`}>{sel ? <Check className="size-2.5" /> : null}</span>
+              {v != null ? <ScoreRing value={v as number} size={20} stroke={3} hideValue /> : <span className="size-5 rounded-full border border-dashed border-line" />}
+              <span className="flex-1 truncate text-[10px] font-semibold">{t as string}</span>
+              <span className="text-[9px] text-ink-3">{v != null ? `${v}%` : "—"}</span>
+            </div>
+          ))}
+        </Screen>
+        <div className="anim-pop absolute inset-x-3 -bottom-3 flex items-center gap-2 rounded-full bg-ink px-2.5 py-1.5 text-bg shadow-pop" style={d(0.6)}>
+          <span className="flex-1 text-[9.5px]"><strong>3</strong> selecionadas</span>
+          <span className="rounded-full bg-accent px-2 py-0.5 text-[9px] font-medium text-accent-ink">Verificar compatibilidade</span>
+        </div>
+      </div>
+    </Frame>
+  ),
+
+  segments: () => (
+    <Frame>
+      <Screen className="space-y-2">
+        <p className="flex items-center gap-1 text-[10.5px] font-semibold"><Building2 className="size-3 text-accent" /> Segmentar empresas</p>
+        <div className="flex flex-wrap gap-1">{["B2B", "B2C", "B2B2C"].map((t, i) => <Chip key={t} on={i === 0}>{t}</Chip>)}</div>
+        <div className="flex flex-wrap gap-1">{["Startup", "Média", "Grande"].map((t, i) => <Chip key={t} on={i > 0}>{t}</Chip>)}</div>
+        <div className="flex flex-wrap gap-1">{["Fintech", "Software e SaaS", "Varejo"].map((t, i) => <Chip key={t} on={i < 2}>{t}</Chip>)}</div>
+        <p className="anim-pop rounded-lg bg-accent-soft px-2 py-1 text-[9.5px] text-accent" style={d(0.6)}>Filtrada · segmento: empresa B2C</p>
+      </Screen>
+    </Frame>
+  ),
+
+  listSort: () => (
+    <Frame>
+      <Screen className="space-y-1.5">
+        <div className="flex flex-wrap items-center gap-1">
+          <span className="rounded-full bg-ink px-2 py-0.5 text-[9.5px] text-bg">Mais compatíveis</span>
+          <span className="rounded-full border border-ok/50 bg-ok-soft px-2 py-0.5 text-[9.5px] font-medium text-ok">Top match (85+)</span>
+        </div>
+        {[["Head of Growth Marketing", "Nubank", 96], ["Growth Lead", "Stone", 88]].map(([t, c, v], k) => (
+          <div key={t as string} className="anim-pop rounded-xl border border-line bg-bg/70 p-2" style={d(0.2 + k * 0.15)}>
+            <p className="truncate text-[11px] font-semibold">{t as string}</p>
+            <p className="text-[9.5px] text-ink-3">{c as string}</p>
+            <span className="mt-1 inline-flex items-center gap-1 rounded-full border border-ok/40 bg-ok-soft py-px pr-2 pl-px text-[9.5px] font-semibold text-ok"><ScoreRing value={v as number} size={14} stroke={2} hideValue />{v as number}% compatível · top match</span>
+          </div>
+        ))}
       </Screen>
     </Frame>
   ),

@@ -3,16 +3,16 @@
 import { createContext, useContext, useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
-  ArrowRightLeft, BookOpen, FileText, Bot, Check, ChevronLeft, ChevronRight, CircleCheck, CircleHelp, Clock, Columns3, Copy, Eye, Funnel,
+  ArrowRightLeft, BookOpen, Building2, FileText, Bot, Check, ChevronLeft, ChevronRight, CircleCheck, CircleHelp, Clock, Columns3, Copy, Eye, Funnel,
   LayoutList, Lightbulb, LogOut, Mail, Radar, RotateCcw, Search, Share2, Smartphone, Sparkles, Star, Users, X,
 } from "lucide-react";
 import { GuideVisual } from "./guide-visuals";
-import { GUIDES, MODULE_GUIDES, type GuideId, type IconKey } from "@/lib/onboarding";
+import { GUIDES, MODULE_GUIDES, guideState, type GuideId, type IconKey } from "@/lib/onboarding";
 
 export const ICONS: Record<IconKey, React.ComponentType<{ className?: string }>> = {
   radar: Radar, search: Search, bot: Bot, star: Star, users: Users, kanban: Columns3, mail: Mail, share: Share2, sparkles: Sparkles,
   filter: Funnel, list: LayoutList, phone: Smartphone, clock: Clock, eye: Eye, copy: Copy, move: ArrowRightLeft, help: CircleHelp,
-  check: Check, logout: LogOut, file: FileText,
+  check: Check, logout: LogOut, file: FileText, building: Building2,
 };
 
 /* ---------- contexto ---------- */
@@ -48,8 +48,10 @@ export function HelpButton({ id, className = "" }: { id: GuideId; className?: st
 export function ModuleTip({ id, className = "" }: { id: GuideId; className?: string }) {
   const g = useGuides();
   // espera o tour geral terminar: um guia de cada vez
-  if (!g || g.seen.has(id) || !g.seen.has("welcome") || g.active) return null;
+  const state = g ? guideState(g.seen, id) : "seen";
+  if (!g || state === "seen" || !g.seen.has("welcome") || g.active) return null;
   const guide = GUIDES[id];
+  const updated = state === "updated" && !!guide.news;
   const Icon = ICONS[guide.icon];
   return (
     // @container: o layout segue a largura do espaço onde o aviso está (modal estreito ou página larga), não a da tela
@@ -58,12 +60,12 @@ export function ModuleTip({ id, className = "" }: { id: GuideId; className?: str
         <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-accent text-accent-ink"><Icon className="size-5" /></span>
         <div className="min-w-0 flex-1 @xl:flex @xl:items-center @xl:gap-4">
           <div className="min-w-0 flex-1">
-            <p className="text-sm font-semibold">Primeira vez aqui? {guide.label}</p>
-            <p className="mt-0.5 text-[13px] text-ink-2">{guide.summary}.</p>
+            <p className="text-sm font-semibold">{updated ? <>Novidades em {guide.label}</> : <>Primeira vez aqui? {guide.label}</>}</p>
+            <p className="mt-0.5 text-[13px] text-ink-2">{updated ? guide.news : `${guide.summary}.`}</p>
           </div>
           <button type="button" onClick={() => g.open(id)}
             className="mt-2.5 inline-flex min-h-10 shrink-0 items-center gap-1.5 rounded-full bg-ink px-4 py-2 text-sm font-medium whitespace-nowrap text-bg transition hover:opacity-85 @xl:mt-0">
-            <BookOpen className="size-4" /> Ver como funciona <span className="opacity-60">· {guide.steps.length} passos</span>
+            <BookOpen className="size-4" /> {updated ? "Ver o que mudou" : "Ver como funciona"} <span className="opacity-60">· {guide.steps.length} passos</span>
           </button>
         </div>
         <button type="button" onClick={() => g.dismiss(id)} aria-label="Dispensar dica"
@@ -210,7 +212,7 @@ export function HelpCenter({ seen, onPick, onReset, onClose }: { seen: Set<strin
         {all.map((id) => {
           const g = GUIDES[id];
           const Icon = ICONS[g.icon];
-          const done = seen.has(id);
+          const st = guideState(seen, id);
           return (
             <li key={id}>
               <button type="button" onClick={() => onPick(id)}
@@ -220,7 +222,8 @@ export function HelpCenter({ seen, onPick, onReset, onClose }: { seen: Set<strin
                   <span className="block text-sm font-semibold">{g.label}</span>
                   <span className="line-clamp-2 block text-xs text-ink-3">{g.summary}</span>
                 </span>
-                {done ? <CircleCheck className="size-5 shrink-0 text-ok" aria-label="visto" /> : <span className="shrink-0 rounded-full bg-accent px-2 py-0.5 text-[10px] font-bold tracking-wide text-accent-ink">NOVO</span>}
+                {st === "seen" ? <CircleCheck className="size-5 shrink-0 text-ok" aria-label="visto" />
+                  : <span className="shrink-0 rounded-full bg-accent px-2 py-0.5 text-[10px] font-bold tracking-wide text-accent-ink">{st === "updated" ? "NOVIDADES" : "NOVO"}</span>}
               </button>
             </li>
           );

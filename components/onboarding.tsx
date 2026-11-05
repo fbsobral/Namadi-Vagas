@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { markGuideSeen, resetGuides } from "@/app/actions";
-import type { GuideId } from "@/lib/onboarding";
+import { seenKey, type GuideId } from "@/lib/onboarding";
 import { GuideContext, GuideSheet, HelpCenter, type GuideCtx } from "./guide";
 import { SearchDialog } from "./search-dialog";
 
@@ -17,8 +17,9 @@ export function OnboardingProvider({ seen: initial, hasSearches, children }: { s
   const [create, setCreate] = useState(false);
 
   const markSeen = useCallback((id: GuideId) => {
-    setSeen((s) => (s.has(id) ? s : new Set(s).add(id)));
-    markGuideSeen(id).catch(() => {}); // se falhar, no pior caso o guia aparece de novo
+    const key = seenKey(id); // guarda a versão vista: quando o guia ganhar novidades, volta a aparecer
+    setSeen((s) => (s.has(key) ? s : new Set(s).add(key)));
+    markGuideSeen(key).catch(() => {}); // se falhar, no pior caso o guia aparece de novo
   }, []);
 
   // primeira visita: tour geral (um instante depois, para a página assentar)

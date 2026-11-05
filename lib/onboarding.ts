@@ -8,7 +8,7 @@ export type VisualKey =
   | "radar" | "searchForm" | "robot" | "favContacts" | "kanban" | "emailShare" | "phone" | "cv" | "groups" | "exclude" | "sources"
   | "emailPreview" | "tabs" | "newBadge" | "toolbar" | "jobDetail" | "contactGroups" | "message" | "kanbanMove" | "boardFilter"
   | "invite" | "members" | "owner" | "sharedBanner" | "notifySelect" | "leave"
-  | "resumeScore" | "resumeChat" | "resumeFit" | "resumeLetter";
+  | "resumeScore" | "resumeChat" | "resumeFit" | "resumeLetter" | "resumeRefine" | "fitBulk" | "segments" | "listSort";
 
 export type GuideStep = {
   icon: IconKey;
@@ -21,11 +21,17 @@ export type GuideStep = {
   mobile?: string;
 };
 
-export type Guide = { id: GuideId; label: string; summary: string; icon: IconKey; steps: GuideStep[] };
+export type Guide = {
+  id: GuideId; label: string; summary: string; icon: IconKey; steps: GuideStep[];
+  /** sobe quando o guia ganha novidades: quem viu a versão anterior recebe o aviso "Novidades" */
+  version?: number;
+  /** o que mudou na versão atual (aparece no aviso de novidades) */
+  news?: string;
+};
 
 export type IconKey =
   | "radar" | "search" | "bot" | "star" | "users" | "kanban" | "mail" | "share" | "sparkles" | "filter"
-  | "list" | "phone" | "clock" | "eye" | "copy" | "move" | "help" | "check" | "logout" | "file";
+  | "list" | "phone" | "clock" | "eye" | "copy" | "move" | "help" | "check" | "logout" | "file" | "building";
 
 export const GUIDES: Record<GuideId, Guide> = {
   welcome: {
@@ -92,15 +98,17 @@ export const GUIDES: Record<GuideId, Guide> = {
   search: {
     id: "search",
     label: "Criar e editar buscas",
-    summary: "Palavras-chave, E/OU, exclusões, fontes, frequência e e-mail",
+    summary: "Palavras-chave, E/OU, exclusões, segmentos de empresa, fontes, frequência e e-mail",
     icon: "search",
+    version: 2,
+    news: "Agora dá para segmentar as empresas da busca: B2B ou B2C, setor e porte.",
     steps: [
       {
         icon: "sparkles",
         visual: "cv",
         title: "Atalho: preencha com seu currículo",
         body: "Envie um PDF, DOCX ou TXT (até 5 MB). A IA sugere nome, cargos em português e inglês, senioridade, exclusões e local. Tudo fica editável, e dá para desfazer.",
-        bullets: ["O currículo não é guardado: é lido na hora e descartado", "Ela pode sugerir até 2 variações extras de busca"],
+        bullets: ["Aqui o currículo não é guardado: é lido na hora e descartado", "Ela pode sugerir até 2 variações extras de busca"],
       },
       {
         icon: "search",
@@ -116,11 +124,18 @@ export const GUIDES: Record<GuideId, Guide> = {
         body: "“Não pode conter no título” descarta de cara. “Excluir também na descrição” manda a vaga para a aba Filtradas, com o motivo, e você pode mantê-la se quiser.",
       },
       {
+        icon: "building",
+        visual: "segments",
+        title: "Novo: segmente as empresas",
+        body: "Em “Segmentar empresas”, escolha o modelo de negócio (B2B, B2C, B2B2C), o porte e os setores. A IA classifica cada empresa uma vez e as vagas fora do segmento vão para Filtradas, com o motivo.",
+        bullets: ["Empresa que a IA não conhece continua na lista", "“Manter na lista” vale mais que o segmento", "O cartão da vaga mostra as etiquetas da empresa"],
+      },
+      {
         icon: "radar",
         visual: "sources",
-        title: "Onde, quando e em que empresas",
+        title: "Onde e quando procurar",
         body: "LinkedIn e Gupy são lidos direto (rápido e sem CAPTCHA). Google aberto alcança qualquer outro site de vagas, mas é mais lento.",
-        bullets: ["Janela: vagas das últimas 24 h, 7 dias, 30 dias ou qualquer data", "Frequência: 30 min até semanal, ou minutos personalizados", "Segmentar empresas: B2B ou B2C, setor e porte (a IA classifica cada empresa)"],
+        bullets: ["Janela: vagas das últimas 24 h, 7 dias, 30 dias ou qualquer data", "Frequência: 30 min até semanal, ou minutos personalizados"],
       },
       {
         icon: "mail",
@@ -131,20 +146,28 @@ export const GUIDES: Record<GuideId, Guide> = {
       },
     ],
   },
-
   list: {
     id: "list",
     label: "Lista de vagas",
-    summary: "Abas, vagas novas, favoritas e ações da busca",
+    summary: "Abas, vagas novas, compatibilidade, favoritas e ações da busca",
     icon: "list",
+    version: 2,
+    news: "Agora cada vaga mostra a % de compatibilidade com o seu currículo, e a lista ordena e filtra por ela.",
     steps: [
       {
         icon: "list",
         visual: "tabs",
         title: "Suas vagas, organizadas",
         body: "“Todas as vagas” junta o que todas as buscas encontraram. Escolha uma busca no menu para ver só as dela.",
-        bullets: ["Novas: o que você ainda não abriu", "Favoritas: as que você marcou com ★", "Filtradas: barradas pela exclusão na descrição"],
+        bullets: ["Novas: o que você ainda não abriu", "Favoritas: as que você marcou com ★", "Filtradas: barradas por exclusão ou segmento, com o motivo"],
         mobile: "No celular, as buscas ficam no menu (☰) no canto superior.",
+      },
+      {
+        icon: "star",
+        visual: "listSort",
+        title: "Novo: o quanto cada vaga combina com você",
+        body: "Com o seu currículo na área Currículo, cada vaga ganha um anel com a % de compatibilidade. Ordene por “Mais compatíveis” ou filtre por Top match (85+), Boa ou mais (70+) ou Sem nota.",
+        bullets: ["Vagas novas já chegam com a nota", "As antigas você verifica na área Currículo, uma a uma ou todas de uma vez"],
       },
       {
         icon: "eye",
@@ -156,24 +179,25 @@ export const GUIDES: Record<GuideId, Guide> = {
         icon: "star",
         visual: "favContacts",
         title: "A estrela faz mais do que salvar",
-        body: "Favoritar coloca a vaga no Kanban e dispara a busca de pessoas para conhecer na empresa. Toque no cartão para ver a descrição e os contatos.",
+        body: "Favoritar coloca a vaga no Kanban e dispara a busca de pessoas para conhecer na empresa. Toque no cartão para ver a descrição, os contatos e a análise com o seu currículo.",
       },
       {
         icon: "bot",
         visual: "toolbar",
         title: "Comandos da busca",
-        body: "Com uma busca aberta: Rodar agora, Pausar/Retomar, Editar, Compartilhar e Excluir. Logo abaixo, o histórico mostra cada rodada do robô.",
+        body: "Com uma busca aberta: Rodar agora, Pausar/Retomar, Editar, Compartilhar e Excluir (o que aparece depende do seu nível de acesso). Logo abaixo, o histórico mostra cada rodada do robô.",
         bullets: ["Se uma rodada falhar, o robô tenta de novo em até 30 min", "Sem nada novo? Aumente a janela de tempo"],
         mobile: "No celular, deslize a barra de comandos para o lado para ver todos.",
       },
     ],
   },
-
   job: {
     id: "job",
-    label: "Detalhes da vaga e pessoas",
-    summary: "Descrição, favoritar e contatos com mensagem pronta",
+    label: "Detalhes da vaga",
+    summary: "Descrição, análise com o seu currículo, carta, favoritar e contatos",
     icon: "users",
+    version: 2,
+    news: "Agora a vaga traz a análise completa com o seu currículo e gera carta de apresentação.",
     steps: [
       {
         icon: "eye",
@@ -183,6 +207,19 @@ export const GUIDES: Record<GuideId, Guide> = {
       },
       {
         icon: "star",
+        visual: "resumeFit",
+        title: "Novo: seu currículo x esta vaga",
+        body: "A nota rápida já aparece aqui. “Ver análise completa” mostra os requisitos que você atende, os que faltam, como adaptar o currículo e um resumo reescrito para esta vaga.",
+        bullets: ["Mudou o currículo? “Refazer” atualiza a análise"],
+      },
+      {
+        icon: "copy",
+        visual: "resumeLetter",
+        title: "Novo: carta de apresentação",
+        body: "“Gerar carta” escreve uma carta curta a partir do seu currículo e dos requisitos da vaga. Copie, ajuste e envie; dá para pedir outra versão.",
+      },
+      {
+        icon: "users",
         visual: "contactGroups",
         title: "Favorite para destravar pessoas",
         body: "Ao favoritar, o robô procura perfis públicos do LinkedIn ligados à empresa, separados em três grupos.",
@@ -197,7 +234,6 @@ export const GUIDES: Record<GuideId, Guide> = {
       },
     ],
   },
-
   board: {
     id: "board",
     label: "Kanban de candidaturas",
@@ -259,40 +295,55 @@ export const GUIDES: Record<GuideId, Guide> = {
   resume: {
     id: "resume",
     label: "Currículo com IA",
-    summary: "Nota, sugestões, compatibilidade com vagas e carta",
+    summary: "Nota, sugestões, refinar com a IA, compatibilidade com as vagas e carta",
     icon: "file",
+    version: 2,
+    news: "“Refinar com a IA” nas sugestões, nota automática em cada vaga nova e verificação em massa.",
     steps: [
       {
         icon: "file",
         visual: "resumeScore",
         title: "Uma nota para o seu currículo",
-        body: "Envie PDF, DOCX ou TXT. A IA dá uma nota de 0 a 100 e mostra onde você vai bem e onde perde pontos: abrangência, estrutura, clareza, impacto e leitura por ATS.",
+        body: "Envie PDF, DOCX ou TXT. A IA dá uma nota de 0 a 100 e mostra onde você vai bem e onde perde pontos: abrangência, estrutura, clareza, impacto e leitura por sistemas de triagem (ATS).",
         bullets: ["Guardamos só o texto, nunca o arquivo", "“Apagar” remove o currículo e todas as análises"],
       },
       {
         icon: "sparkles",
         visual: "resumeChat",
         title: "Um especialista ao seu lado",
-        body: "Cada sugestão mostra o trecho atual e uma versão melhor. Aceite, edite, ignore ou toque em “Refinar com a IA” para contar algo que ela não sabe (um número, uma correção): ela responde e ajusta a sugestão. Depois, “Reanalisar” mostra a nova nota.",
+        body: "Cada sugestão mostra o trecho atual e uma versão melhor. Aceite, edite antes de aplicar ou ignore. Depois, “Reanalisar” mostra a nova nota.",
         bullets: ["A IA não inventa experiência: quando falta um número, ela marca [X%] para você completar"],
+      },
+      {
+        icon: "sparkles",
+        visual: "resumeRefine",
+        title: "Novo: refine com a IA",
+        body: "Em qualquer sugestão, toque em “Refinar com a IA” e conte o que ela não sabe: um resultado, uma correção, um contexto. Ela responde levando em conta o item inteiro e ajusta a sugestão, pronta para aceitar.",
+        bullets: ["Converse quantas vezes quiser: a conversa fica guardada na sugestão"],
       },
       {
         icon: "star",
         visual: "resumeFit",
-        title: "Compatibilidade com cada vaga",
-        body: "Cada vaga nova já ganha a % de compatibilidade sozinha, e ela aparece no cartão. Na área Currículo, verifique as antigas uma a uma ou todas de uma vez. Abra a vaga para a análise completa: o que falta e o currículo adaptado.",
-        bullets: ["Na lista de vagas, ordene por “Mais compatíveis” ou filtre por Top match", "Dá para desligar a verificação automática na área Currículo"],
+        title: "Novo: nota em cada vaga, sozinha",
+        body: "Toda vaga nova que o robô encontra já ganha a % de compatibilidade com o seu currículo, e ela aparece no cartão. É uma checagem rápida, feita para gastar pouco.",
+        bullets: ["Dá para desligar em “Verificar sozinho as vagas novas”"],
+      },
+      {
+        icon: "check",
+        visual: "fitBulk",
+        title: "Novo: verifique várias de uma vez",
+        body: "Em “Suas vagas x seu currículo”, veja todas as vagas com a nota. Verifique uma, selecione várias ou toque em “Verificar as que faltam”. Filtre por verificadas ou pendentes.",
+        mobile: "No celular, a barra de seleção aparece no rodapé da tela.",
       },
       {
         icon: "copy",
         visual: "resumeLetter",
-        title: "Carta de apresentação pronta",
-        body: "Na mesma vaga, “Gerar carta” escreve uma carta curta a partir do seu currículo e dos requisitos. Copie, ajuste e envie.",
-        mobile: "No celular, “Imprimir / PDF” na área Currículo salva a versão atual como PDF.",
+        title: "Análise completa e carta na vaga",
+        body: "Abra uma vaga para a análise completa (o que falta e o currículo adaptado) e para gerar uma carta de apresentação a partir do seu currículo.",
+        mobile: "“Imprimir / PDF” na área Currículo salva a versão atual do currículo como PDF.",
       },
     ],
   },
-
   shared: {
     id: "shared",
     label: "Busca compartilhada comigo",
@@ -331,3 +382,16 @@ export const GUIDES: Record<GuideId, Guide> = {
 export const MODULE_GUIDES: GuideId[] = ["search", "list", "job", "board", "resume", "share", "shared"];
 
 export const isGuideId = (s: unknown): s is GuideId => typeof s === "string" && s in GUIDES;
+
+/** Chave guardada como "visto": o id na versão 1 e "id@versão" depois (assim a versão nova volta a aparecer). */
+export const seenKey = (id: GuideId) => ((GUIDES[id].version ?? 1) > 1 ? `${id}@${GUIDES[id].version}` : id);
+
+/** new = nunca viu; updated = viu uma versão anterior; seen = em dia. */
+export function guideState(seen: Set<string>, id: GuideId): "new" | "updated" | "seen" {
+  if (seen.has(seenKey(id))) return "seen";
+  if (seen.has(id) || [...seen].some((k) => k.startsWith(`${id}@`))) return "updated";
+  return "new";
+}
+
+/** Valida o que o navegador manda marcar como visto: só a chave da versão atual de um guia existente. */
+export const isSeenKey = (s: unknown): s is string => typeof s === "string" && (Object.keys(GUIDES) as GuideId[]).some((id) => seenKey(id) === s);

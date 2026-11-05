@@ -14,7 +14,7 @@ import { linkedinDescription } from "@/lib/providers";
 import { PALETTE, SOURCES } from "@/lib/sources";
 import { isStage } from "@/lib/stages";
 import { cleanSpec, parseSpec, specToQuery, type QuerySpec } from "@/lib/query";
-import { isGuideId } from "@/lib/onboarding";
+import { isSeenKey } from "@/lib/onboarding";
 import { assignableRoles, canEdit, canManage, canManageMember, isMemberRole, type MemberRole } from "@/lib/roles";
 
 export type SearchInput = {
@@ -333,7 +333,7 @@ export async function declineInviteAction(memberId: string) {
 
 export async function markGuideSeen(id: string) {
   const userId = await uid();
-  if (!isGuideId(id)) return;
+  if (!isSeenKey(id)) return;
   await q.addSeenGuide(userId, id);
 }
 
