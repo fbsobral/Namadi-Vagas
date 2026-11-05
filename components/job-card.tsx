@@ -8,6 +8,7 @@ import { timeAgo } from "@/lib/format";
 import { sourceLabel } from "@/lib/sources";
 import type { Job } from "@/lib/types";
 import { ScoreRing, scoreTone } from "./score-ring";
+import { industryLabel, modelLabel, sizeLabel } from "@/lib/segments";
 
 export function JobCard({ job, href, showSearch, index, canKeep }: { job: Job; href: string; showSearch: boolean; index: number; canKeep: boolean }) {
   return (
@@ -34,6 +35,9 @@ export function JobCard({ job, href, showSearch, index, canKeep }: { job: Job; h
                 <span className="inline-flex items-center gap-1.5 rounded-full bg-surface-2 px-2.5 py-1 text-ink-2">
                   <span className="size-1.5 rounded-full" style={{ background: job.search_color }} />{job.search_name}
                 </span>
+              )}
+              {(job.co_model || job.co_industry || job.co_size) && (
+                <span className="rounded-full border border-line px-2.5 py-1 text-ink-2" title="Empresa classificada por IA">{[modelLabel(job.co_model ?? null), industryLabel(job.co_industry ?? null), sizeLabel(job.co_size ?? null)].filter(Boolean).join(" · ")}</span>
               )}
               {job.fit_score != null && <FitChip score={job.fit_score} />}
               <span>encontrada {timeAgo(job.found_at)}</span>

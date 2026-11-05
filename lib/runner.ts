@@ -9,6 +9,8 @@ import { evaluateJob, parseSpec, type QuerySpec } from "./query";
 import { gupyFetch, linkedinDescription, linkedinFetch, type Found } from "./providers";
 import { notifyMembersRun, sendDigest } from "./notify";
 import { autoFitNewJobs } from "./resume-service";
+import { applySegments } from "./companies";
+import { hasSegments } from "./segments";
 import type { Search } from "./types";
 
 const running = new Set<string>();
@@ -149,6 +151,18 @@ export async function runSearch(searchId: string): Promise<{ added: number; tota
     // Regras "na descrição": lê o texto das vagas novas do LinkedIn e manda para "Filtradas" o que for barrado
     const enr = await enrichLinkedin(s.id, spec).catch(() => null);
     if (enr) note += ` · ${enr}`;
+
+    // Segmentos de empresa (B2B/B2C, setor, porte): classifica as empresas novas (cache + IA barata) e
+    // manda para "Filtradas" as vagas fora do segmento, antes de avisar por e-mail e de calcular compatibilidade
+    if (newIds.length && hasSegments(spec.segments)) {
+      const r = await applySegments(s.id, s.user_id, spec.segments, { classify: true, onlyIds: newIds }).catch(() => null);
+      if (r?.barred.length) {
+        const out = new Set(r.barred);
+        newIds.splice(0, newIds.length, ...newIds.filter((id) => !out.has(id)));
+        added -= r.barred.length;
+        note += ` · ${r.barred.length} fora do segmento`;
+      }
+    }
 
     // Compatibilidade com o currículo: calculada em segundo plano para quem tem currículo (não atrasa a rodada)
     if (newIds.length) {

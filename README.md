@@ -59,9 +59,15 @@ Aqui, por escolha da pessoa, **o texto do currículo fica guardado** (tabela `re
 
 Modelos, limites e liga/desliga ficam no painel **Admin · IA** (abaixo). Saída estruturada validada; com Opus/Sonnet 5.5, fallback do servidor ativado (`fallbacks: "default"`) para o caso de recusa por política. Requer `ANTHROPIC_API_KEY`.
 
+## Segmentar empresas
+No editor da busca, **Segmentar empresas** (opcional): modelo de negócio (B2B, B2C, B2B2C), porte (startup a 10 mil+ pessoas) e setores (lista fixa em `lib/segments.ts`). A IA classifica cada empresa **uma vez** e guarda na tabela `companies` (25 empresas por chamada, Haiku 5.5 sem raciocínio); as próximas vagas da mesma empresa não custam nada. Vagas fora do segmento vão para **Filtradas** com o motivo (“segmento: empresa B2C”); empresa desconhecida pela IA continua na lista; “Manter na lista” vence o segmento. Mudar os segmentos reaplica na hora com o cache e classifica o resto em segundo plano. O cartão da vaga mostra as etiquetas da empresa.
+
+## Refinar sugestão com a IA
+Em cada sugestão do especialista, **Refinar com a IA** abre uma conversa: a pessoa acrescenta um ponto (um número, uma correção, um contexto) e a IA responde levando em conta o item inteiro (seção, problema, trecho original, sugestão atual, motivo, conversa anterior) e o currículo, devolvendo a sugestão refinada pronta para aceitar. A conversa fica guardada na sugestão.
+
 ## Admin · IA (`/admin`)
 Só para administradores: e-mails **verificados** listados em `ADMIN_EMAILS` (separados por vírgula). Para os demais a página não existe (404) e o link não aparece no menu; salvar também é conferido no servidor.
-- **Chave geral** que desliga toda a IA, e por recurso (preencher busca com CV, análise de currículo, compatibilidade completa, checagem rápida, checagem automática, carta, classificação de empresas): **ligado/desligado, modelo** (Opus/Sonnet/Haiku 5.5) e **limite diário por pessoa**. Fica no `kv` (`ai:config`) e vale em até 20 s; as telas escondem o que está desligado e o servidor recusa.
+- **Chave geral** que desliga toda a IA, e por recurso (preencher busca com CV, análise de currículo, refinar sugestão, compatibilidade completa, checagem rápida, checagem automática, carta, classificação de empresas): **ligado/desligado, modelo** (Fable 5.1, Opus 5.5, Sonnet 5.5 ou Haiku 5.5; há um atalho para usar o mesmo em todos) e **limite diário por pessoa**. Fica no `kv` (`ai:config`) e vale em até 20 s; as telas escondem o que está desligado e o servidor recusa.
 - **Consumo** registrado a cada chamada (tabela `ai_usage`: chamadas, erros, tokens por dia, recurso e modelo) com custo estimado pelo preço de tabela (hoje, 7 e 30 dias). A fatura real fica no Claude Console.
 - As variáveis `AI_MODEL_*` e `*_DAILY_LIMIT` continuam valendo como **padrão** enquanto nada for salvo no painel.
 

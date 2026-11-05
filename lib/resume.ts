@@ -16,8 +16,8 @@ import type { AiFeature } from "./ai-shared";
 
 // Modelo, liga/desliga e limites vêm do painel /admin (lib/ai-config.ts).
 // O fallback do servidor ("default") reexecuta a chamada em outro modelo se a primeira recusar por política;
-// vale para Opus e Sonnet 5.5 (o Haiku não tem fallback do servidor).
-const withFallback = (model: string) => model.startsWith("claude-opus") || model === "claude-sonnet-5-5";
+// vale para Fable, Opus e Sonnet 5.5 (o Haiku não tem fallback do servidor).
+const withFallback = (model: string) => model.startsWith("claude-opus") || model.startsWith("claude-fable") || model === "claude-sonnet-5-5";
 // Haiku aceita raciocínio desligado (menos tokens); Opus/Sonnet 5.5 rejeitam "disabled".
 const noThinking = (model: string) => (model.startsWith("claude-haiku") ? { thinking: { type: "disabled" as const } } : {});
 
@@ -272,4 +272,24 @@ export async function quickFitBatch(profile: string, jobs: QuickJob[], key: "qui
     console.error("[ai]", e instanceof Error ? e.message : e);
     throw new CvError("Não consegui falar com a IA agora.", 502);
   }
+}
+
+/* ---------- refinar uma sugestão com o que a pessoa contou ---------- */
+
+const RefineOut = z.object({ reply: z.string(), suggestion: z.string() });
+
+const REFINE = `Você é o especialista em currículos que fez a sugestão abaixo. A pessoa respondeu com um ponto novo (um dado, uma correção, um contexto ou uma preferência). ${RULES}
+Considere o item inteiro: a seção, o problema apontado, o trecho original, a sua sugestão atual, o motivo e toda a conversa até aqui, além do currículo completo para manter coerência (datas, cargos, tom e idioma).
+- reply: responda ao ponto em 1 a 3 frases curtas: o que você entendeu e o que mudou (ou por que não mudou). Se o ponto contradiz o currículo ou pede algo que não dá para sustentar, diga com franqueza e proponha o melhor caminho honesto.
+- suggestion: o texto refinado, pronto para colar no lugar do trecho original (mesmo formato do original; item de lista começa com "- "). Use os dados que a pessoa deu; não invente outros.`;
+
+export type RefineInput = { section: string; issue: string; original: string; suggestion: string; why: string; thread: { role: "user" | "ai"; text: string }[] };
+
+export async function refineSuggestion(resumeText: string, item: RefineInput, note: string) {
+  const conversa = item.thread.map((m) => `${m.role === "user" ? "PESSOA" : "VOCÊ"}: ${m.text}`).join("\n");
+  const text = `CURRÍCULO:\n\n${resumeText}\n\n---\n\nITEM\nSeção: ${item.section}\nProblema: ${item.issue}\nTrecho original: ${item.original || "(nenhum: a sugestão acrescenta algo novo)"}\nSua sugestão atual: ${item.suggestion}\nMotivo: ${item.why}${conversa ? `\n\nCONVERSA ATÉ AQUI\n${conversa}` : ""}\n\n---\n\nNOVO PONTO DA PESSOA: ${note}`;
+  const o = await call("refine", REFINE, [{ type: "text", text }], RefineOut, "medium");
+  const suggestion = o.suggestion.trim().slice(0, 1200);
+  if (!suggestion) throw new CvError("Não consegui refinar agora.", 502);
+  return { reply: o.reply.trim().slice(0, 600), suggestion };
 }

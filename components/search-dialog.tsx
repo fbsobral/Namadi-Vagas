@@ -11,6 +11,7 @@ import { QueryBuilder } from "./query-builder";
 import { EmailSettings } from "./email-settings";
 import { CvFill } from "./cv-fill";
 import { useAiFlags } from "./ai-flags";
+import { SegmentPicker } from "./segment-picker";
 import { HelpButton, ModuleTip } from "./guide";
 import type { Search } from "@/lib/types";
 
@@ -99,6 +100,8 @@ function DialogBody({ onClose, initial }: { onClose: () => void; initial?: Searc
             <input value={f.location} onChange={(e) => set("location", e.target.value)} placeholder="São Paulo, remoto…" className="w-full rounded-xl border border-line bg-bg py-3 pr-4 pl-10 outline-none transition focus:border-accent focus:ring-4 focus:ring-accent/15" />
           </div>
         </label>
+
+        <SegmentPicker value={f.spec.segments} onChange={(segments) => set("spec", { ...f.spec, segments })} />
 
         <fieldset className="mt-6">
           <legend className="mb-2 text-sm font-medium">Onde o robô procura</legend>

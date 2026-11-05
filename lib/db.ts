@@ -177,6 +177,16 @@ CREATE TABLE IF NOT EXISTS job_fit (
 );
 CREATE INDEX IF NOT EXISTS idx_job_fit_user ON job_fit(user_id, score DESC);
 
+-- empresas classificadas por IA (modelo de negócio, setor, porte), para os segmentos das buscas; uma vez por empresa
+CREATE TABLE IF NOT EXISTS companies (
+  key TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  model TEXT,
+  industry TEXT,
+  size TEXT,
+  classified_at BIGINT NOT NULL
+);
+
 -- consumo de IA por dia, recurso e modelo (painel /admin)
 CREATE TABLE IF NOT EXISTS ai_usage (
   day TEXT NOT NULL,
@@ -416,11 +426,13 @@ export const countUnnotified = async (searchId: string, since: number) =>
 
 export type JobFilter = "all" | "new" | "fav" | "board" | "filtered";
 
+// mesma normalização de companyKey() em lib/segments.ts
+const COMPANY_KEY_SQL = "lower(regexp_replace(trim(j.company), '\\s+', ' ', 'g'))";
 const PENDING_MS = 4 * 60_000; // busca de contatos 'pendente' há mais que isso é considerada travada
 const JOB_COLS = `j.*, (j.contacts_status = 'pending' AND COALESCE(j.contacts_at, 0) < ${Date.now() - PENDING_MS}) AS contacts_stale, s.name AS search_name, s.color AS search_color, (s.user_id = ?) AS is_owner,
        COALESCE(u.favorite, 0) AS favorite, u.favorited_at AS favorited_at, COALESCE(u.seen, 0) AS seen, u.stage AS stage, COALESCE(u.stage_pos, 0) AS stage_pos,
-       f.score AS fit_score, f.resume_at AS fit_resume_at`;
-const JOB_FROM = `FROM jobs j JOIN searches s ON s.id = j.search_id LEFT JOIN job_user u ON u.job_id = j.id AND u.user_id = ? LEFT JOIN job_fit f ON f.job_id = j.id AND f.user_id = ?`;
+       f.score AS fit_score, f.resume_at AS fit_resume_at, co.model AS co_model, co.industry AS co_industry, co.size AS co_size`;
+const JOB_FROM = `FROM jobs j JOIN searches s ON s.id = j.search_id LEFT JOIN job_user u ON u.job_id = j.id AND u.user_id = ? LEFT JOIN job_fit f ON f.job_id = j.id AND f.user_id = ? LEFT JOIN companies co ON co.key = ${COMPANY_KEY_SQL}`;
 
 export type FitFilter = "top" | "good" | "none";
 
@@ -860,3 +872,29 @@ export const aiUsageSince = (days: number) =>
     "SELECT day, feature, model, calls, errors, input_tokens::float8 AS input_tokens, output_tokens::float8 AS output_tokens FROM ai_usage WHERE day >= ? ORDER BY day DESC",
     dayOf(Date.now() - (days - 1) * 86400_000),
   );
+
+/* ---------- empresas (segmentos) ---------- */
+
+export type CompanyRow = { key: string; name: string; model: string | null; industry: string | null; size: string | null };
+
+export async function getCompanies(keys: string[]) {
+  if (!keys.length) return new Map<string, CompanyRow>();
+  await ready();
+  const r = await pool().query("SELECT key, name, model, industry, size FROM companies WHERE key = ANY($1)", [keys]);
+  return new Map((r.rows as CompanyRow[]).map((c) => [c.key, c]));
+}
+
+export const saveCompany = (c: CompanyRow) =>
+  run(
+    `INSERT INTO companies (key, name, model, industry, size, classified_at) VALUES (?, ?, ?, ?, ?, ?)
+     ON CONFLICT (key) DO UPDATE SET model = EXCLUDED.model, industry = EXCLUDED.industry, size = EXCLUDED.size, classified_at = EXCLUDED.classified_at`,
+    c.key, c.name, c.model, c.industry, c.size, Date.now(),
+  );
+
+/** Vagas de uma busca para (re)aplicar os segmentos: as que não foram mantidas à mão. */
+export const jobsForSegments = (searchId: string) =>
+  all<{ id: string; company: string; filtered: number; filtered_reason: string | null }>(
+    "SELECT id, company, filtered, filtered_reason FROM jobs WHERE search_id = ? AND filter_keep = 0", searchId,
+  );
+
+export const unfilterJob = (id: string) => run("UPDATE jobs SET filtered = 0, filtered_reason = NULL WHERE id = ?", id);

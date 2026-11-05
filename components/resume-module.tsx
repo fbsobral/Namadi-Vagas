@@ -3,9 +3,10 @@
 import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
-  Check, ChevronDown, Download, FileText, Loader2, Pencil, Printer, RefreshCw, ShieldCheck, Sparkles, Star, Trash2, Upload, X,
+  Check, ChevronDown, MessageSquarePlus, Send, Download, FileText, Loader2, Pencil, Printer, RefreshCw, ShieldCheck, Sparkles, Star, Trash2, Upload, X,
 } from "lucide-react";
-import { acceptSuggestionAction, deleteResumeAction, dismissSuggestionAction, reanalyzeResumeAction, saveResumeTextAction } from "@/app/actions";
+import { acceptSuggestionAction, deleteResumeAction, dismissSuggestionAction, reanalyzeResumeAction, refineSuggestionAction, saveResumeTextAction } from "@/app/actions";
+import { useAiFlags } from "./ai-flags";
 import { SUBSCORES, type Resume, type ResumeSuggestion } from "@/lib/resume-shared";
 import type { FitJobItem } from "@/lib/db";
 import { FitList } from "./fit-list";
@@ -239,21 +240,41 @@ function Loaded({ resume, jobs, quota, configured }: { resume: Resume; jobs: Fit
   );
 }
 
-function SuggestionCard({ s, i }: { s: ResumeSuggestion; i: number }) {
+function SuggestionCard({ s: initial, i }: { s: ResumeSuggestion; i: number }) {
+  const flags = useAiFlags();
+  const [refined, setRefined] = useState<ResumeSuggestion | null>(null);
+  const s = refined && refined.id === initial.id && (refined.thread?.length ?? 0) >= (initial.thread?.length ?? 0) ? refined : initial;
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(s.suggestion);
+  const [chat, setChat] = useState((initial.thread?.length ?? 0) > 0);
+  const [note, setNote] = useState("");
+  const [thinking, setThinking] = useState(false);
   const [pending, start] = useTransition();
   const [err, setErr] = useState<string | null>(null);
   const act = (fn: () => Promise<void>) => start(async () => { setErr(null); try { await fn(); } catch (e) { setErr(e instanceof Error ? e.message : "Não deu certo."); } });
   const tone = s.priority === "alta" ? "bg-accent text-accent-ink" : s.priority === "média" ? "bg-accent-soft text-accent" : "bg-surface-2 text-ink-2";
+  const thread = s.thread ?? [];
+
+  const refine = () => {
+    const text = note.trim();
+    if (!text || thinking) return;
+    setErr(null); setThinking(true);
+    start(async () => {
+      const r = await refineSuggestionAction(s.id, text);
+      setThinking(false);
+      if (!r.ok) return setErr(r.error);
+      setRefined(r.data); setDraft(r.data.suggestion); setNote(""); setEditing(false);
+    });
+  };
 
   return (
     <li className="anim-rise flex gap-3" style={{ animationDelay: `${Math.min(i, 6) * 50}ms` }}>
-      <span className="mt-1 grid size-8 shrink-0 place-items-center rounded-full bg-ink text-bg"><Sparkles className="size-4" /></span>
-      <div className="min-w-0 flex-1 rounded-2xl rounded-tl-md border border-line bg-bg/60 p-4">
+      <span className="mt-1 hidden size-8 shrink-0 place-items-center rounded-full bg-ink text-bg sm:grid"><Sparkles className="size-4" /></span>
+      <div className="min-w-0 flex-1 rounded-2xl border border-line bg-bg/60 p-4 sm:rounded-tl-md">
         <div className="flex flex-wrap items-center gap-2">
           <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold tracking-wide uppercase ${tone}`}>{s.priority}</span>
           <span className="text-xs font-medium text-ink-3">{s.section}</span>
+          {thread.length > 0 && <span className="rounded-full bg-ok-soft px-2 py-0.5 text-[10px] font-semibold text-ok">refinada com você</span>}
         </div>
         <p className="mt-1.5 font-medium">{s.issue}</p>
         {s.original && <p className="mt-3 rounded-xl bg-surface-2 px-3 py-2 text-sm text-ink-3 line-through decoration-accent/50">{s.original}</p>}
@@ -261,15 +282,49 @@ function SuggestionCard({ s, i }: { s: ResumeSuggestion; i: number }) {
           <textarea value={draft} onChange={(e) => setDraft(e.target.value)} rows={Math.min(8, Math.max(3, Math.ceil(draft.length / 70)))}
             className="mt-2 w-full rounded-xl border border-accent bg-surface px-3 py-2 text-sm outline-none ring-4 ring-accent/15" />
         ) : (
-          <p className="mt-2 rounded-xl bg-ok-soft px-3 py-2 text-sm whitespace-pre-line text-ink">{!s.original && <span className="mr-1 text-xs font-semibold text-ok">+ acrescentar:</span>}{s.suggestion}</p>
+          <p key={s.suggestion} className={`mt-2 rounded-xl bg-ok-soft px-3 py-2 text-sm whitespace-pre-line text-ink ${refined ? "anim-pop" : ""}`}>{!s.original && <span className="mr-1 text-xs font-semibold text-ok">+ acrescentar:</span>}{s.suggestion}</p>
         )}
         {s.why && <p className="mt-2 text-xs text-ink-3">{s.why}</p>}
+
+        {/* refinar com a IA: a pessoa acrescenta um ponto e a IA responde considerando o item inteiro */}
+        {chat && (
+          <div className="mt-3 space-y-2 rounded-2xl border border-line bg-surface p-3">
+            {thread.map((m, k) => (
+              <p key={k} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
+                <span className={`max-w-[85%] rounded-2xl px-3 py-2 text-sm whitespace-pre-line ${m.role === "user" ? "rounded-br-md bg-ink text-bg" : "rounded-bl-md bg-surface-2 text-ink"}`}>{m.text}</span>
+              </p>
+            ))}
+            {thinking && <p className="flex"><span className="inline-flex items-center gap-2 rounded-2xl rounded-bl-md bg-surface-2 px-3 py-2 text-sm text-ink-3"><Loader2 className="spin size-4" /> Refinando…</span></p>}
+            {thread.length === 0 && !thinking && (
+              <div className="flex flex-wrap gap-1.5">
+                {["Tenho o número: ", "Na verdade, eu ", "Quero destacar ", "Prefiro um tom mais "].map((ex) => (
+                  <button key={ex} type="button" onClick={() => setNote(ex)} className="rounded-full border border-line px-2.5 py-1 text-xs text-ink-2 hover:border-accent hover:text-accent">{ex.trim()}…</button>
+                ))}
+              </div>
+            )}
+            <div className="flex items-end gap-2">
+              <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} maxLength={1000} disabled={thinking}
+                onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); refine(); } }}
+                placeholder="Conte o que a IA precisa saber: um resultado, uma correção, um contexto…" aria-label="Seu ponto para a IA"
+                className="min-w-0 flex-1 resize-none rounded-xl border border-line bg-bg px-3 py-2 text-sm outline-none focus:border-accent focus:ring-4 focus:ring-accent/15" />
+              <button type="button" onClick={refine} disabled={thinking || note.trim().length < 3} aria-label="Enviar para a IA"
+                className="grid size-11 shrink-0 place-items-center rounded-full bg-accent text-accent-ink disabled:opacity-40"><Send className="size-4" /></button>
+            </div>
+          </div>
+        )}
+
         <div className="mt-3 flex flex-wrap gap-2">
           <button disabled={pending || !draft.trim()} onClick={() => act(() => acceptSuggestionAction(s.id, editing ? draft : undefined))}
             className="inline-flex min-h-10 items-center gap-1.5 rounded-full bg-ink px-4 text-sm font-medium text-bg transition hover:opacity-85 disabled:opacity-50">
             <Check className="size-4" /> {editing ? "Aplicar minha versão" : "Aceitar"}
           </button>
-          <button disabled={pending} onClick={() => setEditing((v) => !v)} className="inline-flex min-h-10 items-center gap-1.5 rounded-full border border-line px-4 text-sm font-medium transition hover:bg-surface-2">
+          {flags.refine && !editing && (
+            <button disabled={thinking} onClick={() => setChat((v) => !v)} aria-expanded={chat}
+              className={`inline-flex min-h-10 items-center gap-1.5 rounded-full border px-4 text-sm font-medium transition ${chat ? "border-accent bg-accent-soft text-accent" : "border-line hover:bg-surface-2"}`}>
+              <MessageSquarePlus className="size-4" /> Refinar com a IA
+            </button>
+          )}
+          <button disabled={pending} onClick={() => { setDraft(s.suggestion); setEditing((v) => !v); }} className="inline-flex min-h-10 items-center gap-1.5 rounded-full border border-line px-4 text-sm font-medium transition hover:bg-surface-2">
             <Pencil className="size-4" /> {editing ? "Cancelar" : "Editar"}
           </button>
           {!editing && <button disabled={pending} onClick={() => act(() => dismissSuggestionAction(s.id))} className="inline-flex min-h-10 items-center rounded-full px-3 text-sm text-ink-3 transition hover:text-ink">Ignorar</button>}

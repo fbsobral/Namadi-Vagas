@@ -118,9 +118,9 @@ export const GUIDES: Record<GuideId, Guide> = {
       {
         icon: "radar",
         visual: "sources",
-        title: "Onde e quando procurar",
+        title: "Onde, quando e em que empresas",
         body: "LinkedIn e Gupy são lidos direto (rápido e sem CAPTCHA). Google aberto alcança qualquer outro site de vagas, mas é mais lento.",
-        bullets: ["Janela: vagas das últimas 24 h, 7 dias, 30 dias ou qualquer data", "Frequência: 30 min até semanal, ou minutos personalizados"],
+        bullets: ["Janela: vagas das últimas 24 h, 7 dias, 30 dias ou qualquer data", "Frequência: 30 min até semanal, ou minutos personalizados", "Segmentar empresas: B2B ou B2C, setor e porte (a IA classifica cada empresa)"],
       },
       {
         icon: "mail",
@@ -273,7 +273,7 @@ export const GUIDES: Record<GuideId, Guide> = {
         icon: "sparkles",
         visual: "resumeChat",
         title: "Um especialista ao seu lado",
-        body: "Cada sugestão mostra o trecho atual e uma versão melhor. Aceite, edite antes de aplicar ou ignore. Depois, “Reanalisar” mostra a nova nota.",
+        body: "Cada sugestão mostra o trecho atual e uma versão melhor. Aceite, edite, ignore ou toque em “Refinar com a IA” para contar algo que ela não sabe (um número, uma correção): ela responde e ajusta a sugestão. Depois, “Reanalisar” mostra a nova nota.",
         bullets: ["A IA não inventa experiência: quando falta um número, ela marca [X%] para você completar"],
       },
       {

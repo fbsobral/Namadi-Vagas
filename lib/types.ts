@@ -57,6 +57,9 @@ export type Job = {
   is_owner?: boolean;
   fit_score?: number | null; // compatibilidade com o currículo, quando já calculada
   fit_resume_at?: number | null; // versão do currículo usada nessa nota
+  co_model?: string | null; // classificação da empresa (segmentos): b2b, b2c, b2b2c
+  co_industry?: string | null;
+  co_size?: string | null;
   search_name?: string;
   search_color?: string;
 };

@@ -51,6 +51,20 @@ export function AdminAi({ initial, stats, keyConfigured, features }: { initial: 
         <Toggle on={cfg.enabled} onChange={(v) => setCfg((c) => ({ ...c, enabled: v }))} label="IA ligada" big />
       </section>
 
+      {/* modelo para todos */}
+      <section className="flex flex-wrap items-center gap-3 rounded-3xl border border-line bg-surface p-5 shadow-card sm:p-6">
+        <div className="min-w-0 flex-1">
+          <p className="font-semibold">Modelos</p>
+          <p className="text-sm text-ink-3">Escolha o modelo de cada recurso abaixo, ou aplique um só a todos de uma vez.</p>
+        </div>
+        <select defaultValue="" aria-label="Usar o mesmo modelo em todos os recursos"
+          onChange={(e) => { const m = e.target.value as AiConfig["features"][AiFeature]["model"]; if (!m) return; setCfg((c) => ({ ...c, features: Object.fromEntries(Object.entries(c.features).map(([k, f]) => [k, { ...f, model: m }])) as AiConfig["features"] })); e.target.value = ""; }}
+          className="min-h-10 w-full rounded-xl border border-line bg-bg px-3 text-sm outline-none focus:border-accent sm:w-auto">
+          <option value="">Usar o mesmo modelo em todos…</option>
+          {AI_MODELS.map((m) => <option key={m.id} value={m.id}>{m.label} · US$ {m.input}/{m.output}</option>)}
+        </select>
+      </section>
+
       {/* consumo */}
       <section>
         <div className="flex flex-wrap items-end justify-between gap-2">

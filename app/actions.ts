@@ -13,7 +13,7 @@ import { findContacts } from "@/lib/contacts";
 import { linkedinDescription } from "@/lib/providers";
 import { PALETTE, SOURCES } from "@/lib/sources";
 import { isStage } from "@/lib/stages";
-import { cleanSpec, specToQuery, type QuerySpec } from "@/lib/query";
+import { cleanSpec, parseSpec, specToQuery, type QuerySpec } from "@/lib/query";
 import { isGuideId } from "@/lib/onboarding";
 import { assignableRoles, canEdit, canManage, canManageMember, isMemberRole, type MemberRole } from "@/lib/roles";
 
@@ -86,9 +86,17 @@ export async function createSearch(input: SearchInput) {
 
 export async function editSearch(id: string, input: SearchInput) {
   const userId = await uid();
-  const { role } = await editable(userId, id);
+  const { role, search } = await editable(userId, id);
   const { notify_mode, ...data } = sanitize(input);
+  const before = parseSpec(search.query_spec, search.query).segments;
   await q.updateSearch(id, data);
+  // segmentos mudaram: aplica já com o que está em cache e classifica o resto em segundo plano
+  const segs = parseSpec(data.query_spec, data.query).segments;
+  if (JSON.stringify(before ?? null) !== JSON.stringify(segs ?? null)) {
+    const { applySegments } = await import("@/lib/companies");
+    await applySegments(id, search.user_id, segs);
+    if (segs) after(() => applySegments(id, search.user_id, segs, { classify: true }).then(() => {}, () => {}));
+  }
   // o resumo por e-mail da busca é da dona; cada convidado ajusta o seu na barra da busca
   if (role === "owner") {
     const email = notify_mode === "off" ? null : await getViewerEmail();
@@ -466,4 +474,28 @@ export async function saveAiConfigAction(input: unknown) {
   }));
   await saveAiConfig({ enabled: i.enabled !== false, features } as never);
   revalidatePath("/", "layout");
+}
+
+/** "Refinar com a IA": a pessoa acrescenta um ponto a uma sugestão e a IA devolve a sugestão refinada e uma resposta. */
+export async function refineSuggestionAction(id: string, note: string) {
+  const userId = await uid();
+  return friendly(async () => {
+    const text = String(note ?? "").trim().slice(0, 1000);
+    if (text.length < 3) throw new Error("Escreva o ponto que você quer acrescentar.");
+    const r = await myResume(userId);
+    const s = r.analysis.suggestions.find((x) => x.id === id);
+    if (!s || s.status !== "open") throw new Error("Essa sugestão não está mais aberta.");
+    const { getAiConfig } = await import("@/lib/ai-config");
+    await q.rateLimit("refine", userId, (await getAiConfig()).features.refine.daily, 86400_000, "Limite diário de refinamentos atingido. Tente amanhã.");
+    const thread = (s.thread ?? []).slice(-10);
+    const { refineSuggestion } = await import("@/lib/resume");
+    const out = await refineSuggestion(r.text, { section: s.section, issue: s.issue, original: s.original, suggestion: s.suggestion, why: s.why, thread }, text);
+    const now = Date.now();
+    const next = { ...s, suggestion: out.suggestion, thread: [...(s.thread ?? []), { role: "user" as const, text, at: now }, { role: "ai" as const, text: out.reply, at: now }].slice(-20) };
+    // relê para não sobrescrever outra sugestão aceita enquanto a IA respondia
+    const fresh = await myResume(userId);
+    await q.updateResumeText(userId, fresh.text, { ...fresh.analysis, suggestions: fresh.analysis.suggestions.map((x) => (x.id === id ? next : x)) });
+    refresh();
+    return next;
+  });
 }

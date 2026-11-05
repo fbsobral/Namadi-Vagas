@@ -2,11 +2,14 @@
 export type Op = "AND" | "OR";
 export type Scope = "any" | "title"; // onde procurar: título e descrição (padrão) ou só no título
 export type Group = { op: Op; terms: string[]; scope?: Scope };
+import { cleanSegments, type Segments } from "./segments";
+
 export type QuerySpec = {
   groups: Group[]; // cada grupo junta seus termos com `op`
   between: Op; // operador entre os grupos
   exclude: string[]; // termos que NÃO podem aparecer no TÍTULO
   excludeBody?: string[]; // termos que NÃO podem aparecer no título nem na DESCRIÇÃO
+  segments?: Segments; // só empresas destes modelos/setores/portes (classificadas por IA); vazio = todas
 };
 
 export const emptySpec = (): QuerySpec => ({ groups: [{ op: "OR", terms: [], scope: "any" }], between: "AND", exclude: [], excludeBody: [] });
@@ -49,7 +52,7 @@ export function parseSpec(json: string | null | undefined, legacyQuery: string):
   if (json) {
     try {
       const s = JSON.parse(json) as QuerySpec;
-      if (Array.isArray(s.groups)) return { groups: s.groups, between: s.between === "OR" ? "OR" : "AND", exclude: s.exclude ?? [], excludeBody: s.excludeBody ?? [] };
+      if (Array.isArray(s.groups)) return { groups: s.groups, between: s.between === "OR" ? "OR" : "AND", exclude: s.exclude ?? [], excludeBody: s.excludeBody ?? [], segments: cleanSegments(s.segments) };
     } catch { /* cai no legado */ }
   }
   return specFromLegacy(legacyQuery);
@@ -63,6 +66,7 @@ export function cleanSpec(spec: QuerySpec): QuerySpec {
     between: spec.between === "OR" ? "OR" : "AND",
     exclude: clean(spec.exclude ?? [], 10),
     excludeBody: clean(spec.excludeBody ?? [], 10),
+    segments: cleanSegments(spec.segments),
   };
 }
 

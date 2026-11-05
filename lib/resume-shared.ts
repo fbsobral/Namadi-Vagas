@@ -18,6 +18,8 @@ export type ResumeSuggestion = {
   why: string;
   priority: "alta" | "média" | "baixa";
   status: "open" | "accepted" | "dismissed";
+  /** conversa do "Refinar com a IA": o que a pessoa acrescentou e o que a IA respondeu */
+  thread?: { role: "user" | "ai"; text: string; at: number }[];
 };
 
 export type ResumeAnalysis = {
