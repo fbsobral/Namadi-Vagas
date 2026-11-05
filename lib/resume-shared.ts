@@ -46,16 +46,19 @@ export type JobFit = {
 };
 
 export type Resume = {
+  id: string;
   user_id: string;
+  name: string; // como aparece na lista (ex.: "Growth")
+  target_role: string; // cargo-alvo usado na análise ("" = geral)
+  is_primary: number; // 1 = usado nas buscas sem currículo escolhido
   file_name: string;
   text: string;
   analysis: ResumeAnalysis;
   created_at: number;
   updated_at: number; // muda a cada sugestão aceita ou nova análise
   analyzed_at: number;
-  auto_fit: number; // 1 = calcula sozinho a compatibilidade das vagas novas
 };
 
-export type JobFitRow = { job_id: string; fit: JobFit | null; letter: string | null; resume_at: number; updated_at: number };
+export type JobFitRow = { job_id: string; cv_id: string; fit: JobFit | null; letter: string | null; resume_at: number; updated_at: number };
 
 export const fitLabel = (n: number) => (n >= 85 ? "Top match" : n >= 70 ? "Boa compatibilidade" : n >= 50 ? "Compatibilidade média" : "Pouca compatibilidade");

@@ -65,7 +65,7 @@ export default async function Home() {
             {[
               { i: Search, t: "Diga o que procura", d: "Cargos combinados com E/OU, local, fontes e o que excluir. Ou envie o currículo e a IA sugere a busca pronta para você revisar." },
               { i: Bot, t: "O robô vigia por você", d: "Na frequência que você escolher, ele lê LinkedIn, Gupy e o Google, descarta repetidas e marca como NOVA só o que é inédito." },
-              { i: FileText, t: "Veja o quanto combina", d: "Envie seu currículo uma vez: ele ganha nota e sugestões, e cada vaga mostra a % de compatibilidade com você." },
+              { i: FileText, t: "Veja o quanto combina", d: "Tenha um currículo para cada objetivo, com nota e sugestões. Cada busca compara as vagas com o currículo certo e mostra a % de compatibilidade." },
               { i: Star, t: "Favorite e avance", d: "Cada favorita ganha contatos no LinkedIn, carta de apresentação e um lugar no seu Kanban de candidaturas." },
             ].map(({ i: Icon, t, d }, n) => (
               <li key={t} className="relative rounded-3xl border border-line bg-surface p-6 shadow-card sm:p-7">
@@ -488,7 +488,7 @@ function ResumeSection() {
   return (
     <section id="curriculo" className="mx-auto max-w-6xl scroll-mt-24 px-4 pt-24 sm:px-5 sm:pt-28">
       <SectionHead kicker="Currículo com IA" title={<>Mais entrevistas com um <em className="text-accent">currículo melhor</em>.</>}
-        text="Envie seu currículo uma vez. A IA dá uma nota, sugere melhorias e compara com cada vaga que o robô encontrar." />
+        text="Tenha um currículo para cada objetivo. A IA dá uma nota para o cargo que você quer, sugere melhorias e compara com cada vaga que o robô encontrar." />
 
       <div className="mt-12 grid gap-4 md:grid-cols-2">
         <article className="min-w-0 rounded-3xl border border-line bg-surface p-6 shadow-card sm:p-8">

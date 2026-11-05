@@ -343,12 +343,11 @@ export async function resetGuides() {
   refresh();
 }
 
-/* ---------- currículo ---------- */
+/* ---------- currículos (vários, por objetivo) ---------- */
 
-
-async function myResume(userId: string) {
-  const r = await q.getResume(userId);
-  if (!r) throw new Error("Envie seu currículo primeiro, na área Currículo.");
+async function myCv(userId: string, cvId: string) {
+  const r = await q.getCv(userId, String(cvId ?? ""));
+  if (!r) throw new Error("Currículo não encontrado.");
   return r;
 }
 
@@ -357,10 +356,18 @@ async function friendly<T>(fn: () => Promise<T>): Promise<{ ok: true; data: T } 
   try { return { ok: true, data: await fn() }; } catch (e) { return { ok: false, error: e instanceof Error ? e.message : "Algo deu errado." }; }
 }
 
+async function resumeQuota(userId: string) {
+  const { getAiConfig } = await import("@/lib/ai-config");
+  const n = (await getAiConfig()).features.resume.daily;
+  await q.rateLimit("resume", userId, n, 86400_000, `Limite de ${n} análises de currículo por dia atingido. Tente amanhã.`);
+}
+
+const cleanName = (s: unknown, max: number) => String(s ?? "").replace(/\s+/g, " ").trim().slice(0, max);
+
 /** Aceita uma sugestão: troca o trecho original pelo texto sugerido (ou acrescenta, quando não há trecho). */
-export async function acceptSuggestionAction(id: string, edited?: string) {
+export async function acceptSuggestionAction(cvId: string, id: string, edited?: string) {
   const userId = await uid();
-  const r = await myResume(userId);
+  const r = await myCv(userId, cvId);
   const s = r.analysis.suggestions.find((x) => x.id === id);
   if (!s || s.status !== "open") return;
   const next = (edited ?? s.suggestion).trim().slice(0, 2000);
@@ -368,58 +375,105 @@ export async function acceptSuggestionAction(id: string, edited?: string) {
   if (s.original && text.includes(s.original)) text = text.replace(s.original, next);
   else text = `${text.trimEnd()}\n\n${next}`;
   const suggestions = r.analysis.suggestions.map((x) => (x.id === id ? { ...x, suggestion: next, status: "accepted" as const } : x));
-  await q.updateResumeText(userId, text.slice(0, 60_000), { ...r.analysis, suggestions });
+  await q.updateCvText(r.id, text.slice(0, 60_000), { ...r.analysis, suggestions });
   refresh();
 }
 
-export async function dismissSuggestionAction(id: string) {
+export async function dismissSuggestionAction(cvId: string, id: string) {
   const userId = await uid();
-  const r = await myResume(userId);
+  const r = await myCv(userId, cvId);
   const suggestions = r.analysis.suggestions.map((x) => (x.id === id && x.status === "open" ? { ...x, status: "dismissed" as const } : x));
-  await q.updateResumeText(userId, r.text, { ...r.analysis, suggestions });
+  await q.updateCvAnalysis(r.id, { ...r.analysis, suggestions });
   refresh();
 }
 
 /** Edição manual do texto do currículo. */
-export async function saveResumeTextAction(text: string) {
+export async function saveResumeTextAction(cvId: string, text: string) {
   const userId = await uid();
-  const r = await myResume(userId);
+  const r = await myCv(userId, cvId);
   const t = String(text).trim();
   if (t.length < 80) throw new Error("O currículo ficou curto demais.");
-  await q.updateResumeText(userId, t.slice(0, 60_000), r.analysis);
+  await q.updateCvText(r.id, t.slice(0, 60_000), r.analysis);
   refresh();
 }
 
-/** Nova nota e novas sugestões a partir do texto atual (depois de aceitar sugestões ou editar). */
-export async function reanalyzeResumeAction() {
+/** Nova nota e novas sugestões a partir do texto atual e do cargo-alvo. */
+export async function reanalyzeResumeAction(cvId: string) {
   const userId = await uid();
   return friendly(async () => {
-    const r = await myResume(userId);
-    const { getAiConfig } = await import("@/lib/ai-config");
-    const RESUME_DAILY = (await getAiConfig()).features.resume.daily;
-    await q.rateLimit("resume", userId, RESUME_DAILY, 86400_000, `Limite de ${RESUME_DAILY} análises de currículo por dia atingido. Tente amanhã.`);
+    const r = await myCv(userId, cvId);
+    await resumeQuota(userId);
     const { analyzeText } = await import("@/lib/resume");
-    const { analysis } = await analyzeText(r.text);
-    await q.saveResume(userId, r.file_name, r.text, analysis); // mantém o texto como está; só a análise é nova
+    const { analysis } = await analyzeText(r.text, r.target_role);
+    await q.saveCvAnalysis(r.id, r.file_name, r.text, analysis); // mantém o texto; só a análise é nova
     refresh();
     return { score: analysis.score, before: r.analysis.score };
   });
 }
 
-export async function deleteResumeAction() {
-  await q.deleteResume(await uid());
+/** Renomeia e/ou muda o cargo-alvo (a nota só muda ao reanalisar). */
+export async function updateCvMetaAction(cvId: string, name: string, target: string) {
+  const userId = await uid();
+  const r = await myCv(userId, cvId);
+  await q.updateCvMeta(userId, r.id, cleanName(name, 60) || r.name, cleanName(target, 120));
   refresh();
 }
 
-/** Compara o currículo com a vaga (guarda o resultado; `force` refaz). */
-export async function jobFitAction(jobId: string, force = false) {
+export async function setPrimaryCvAction(cvId: string) {
+  const userId = await uid();
+  await myCv(userId, cvId);
+  await q.setPrimaryCv(userId, cvId);
+  refresh();
+}
+
+export async function deleteCvAction(cvId: string) {
+  await q.deleteCv(await uid(), String(cvId));
+  refresh();
+}
+
+/** "Adaptar para outro cargo": cria uma versão nova a partir de um currículo existente, já analisada para o cargo. */
+export async function adaptCvAction(fromCvId: string, target: string, name?: string) {
+  const userId = await uid();
+  return friendly(async () => {
+    const from = await myCv(userId, fromCvId);
+    const t = cleanName(target, 120);
+    if (t.length < 2) throw new Error("Diga para qual cargo é a nova versão.");
+    if ((await q.countCvs(userId)) >= q.MAX_CVS) throw new Error(`Você já tem ${q.MAX_CVS} currículos. Apague um para criar outro.`);
+    await resumeQuota(userId);
+    const { adaptResume } = await import("@/lib/resume");
+    const { text, analysis } = await adaptResume(from.text, t);
+    const id = await q.createCv(userId, { name: cleanName(name, 60) || t, target_role: t, file_name: from.file_name, text, analysis });
+    refresh();
+    return { id };
+  });
+}
+
+/** Qual currículo a pessoa usa nesta busca (null = o principal). As notas desta busca passam a ser desse currículo. */
+export async function setSearchCvAction(searchId: string, cvId: string | null) {
+  const userId = await uid();
+  if (!(await q.roleFor(userId, searchId))) throw new Error("Busca não encontrada");
+  if (cvId) await myCv(userId, cvId);
+  await q.setSearchCv(userId, searchId, cvId || null);
+  refresh();
+}
+
+/** Compara um currículo com a vaga (o da busca, ou outro escolhido); `force` refaz. */
+export async function jobFitAction(jobId: string, force = false, cvId?: string | null) {
   const userId = await uid();
   return friendly(async () => {
     const { computeFit } = await import("@/lib/resume-service");
-    const row = await computeFit(userId, jobId, { force });
+    const row = await computeFit(userId, jobId, { force, cvId });
     refresh();
     return row;
   });
+}
+
+/** O que já foi calculado para a vaga com um currículo específico (ao trocar o currículo na vaga). */
+export async function getJobFitAction(jobId: string, cvId: string) {
+  const userId = await uid();
+  if (!(await q.getJob(userId, jobId))) return null;
+  await myCv(userId, cvId);
+  return q.getJobFit(userId, jobId, cvId);
 }
 
 /** Liga/desliga o cálculo automático da compatibilidade das vagas novas. */
@@ -435,18 +489,20 @@ async function jobForAi(userId: string, jobId: string) {
   if (!description && job.source === "linkedin") description = await ensureDescription(jobId).catch(() => "");
   if (!description) description = job.snippet ?? "";
   if (description.trim().length < 40) throw new Error("Essa vaga não tem descrição suficiente para comparar. Abra o anúncio original.");
-  return { title: job.title, company: job.company, location: job.location, description };
+  return { search_id: job.search_id, title: job.title, company: job.company, location: job.location, description };
 }
 
-export async function coverLetterAction(jobId: string) {
+export async function coverLetterAction(jobId: string, cvId?: string | null) {
   const userId = await uid();
   return friendly(async () => {
-    const r = await myResume(userId);
+    const job = await jobForAi(userId, jobId);
+    const r = cvId ? await myCv(userId, cvId) : await q.effectiveCv(userId, job.search_id);
+    if (!r) throw new Error("Envie seu currículo primeiro, na área Currículo.");
     const { getAiConfig } = await import("@/lib/ai-config");
     await q.rateLimit("letter", userId, (await getAiConfig()).features.letter.daily, 86400_000, "Limite diário de cartas atingido. Tente amanhã.");
     const { coverLetter } = await import("@/lib/resume");
-    const letter = await coverLetter(r.text, await jobForAi(userId, jobId));
-    await q.saveLetter(userId, jobId, letter, r.updated_at);
+    const letter = await coverLetter(r.text, job);
+    await q.saveLetter(userId, jobId, r.id, letter, r.updated_at);
     return letter;
   });
 }
@@ -477,12 +533,12 @@ export async function saveAiConfigAction(input: unknown) {
 }
 
 /** "Refinar com a IA": a pessoa acrescenta um ponto a uma sugestão e a IA devolve a sugestão refinada e uma resposta. */
-export async function refineSuggestionAction(id: string, note: string) {
+export async function refineSuggestionAction(cvId: string, id: string, note: string) {
   const userId = await uid();
   return friendly(async () => {
     const text = String(note ?? "").trim().slice(0, 1000);
     if (text.length < 3) throw new Error("Escreva o ponto que você quer acrescentar.");
-    const r = await myResume(userId);
+    const r = await myCv(userId, cvId);
     const s = r.analysis.suggestions.find((x) => x.id === id);
     if (!s || s.status !== "open") throw new Error("Essa sugestão não está mais aberta.");
     const { getAiConfig } = await import("@/lib/ai-config");
@@ -493,8 +549,8 @@ export async function refineSuggestionAction(id: string, note: string) {
     const now = Date.now();
     const next = { ...s, suggestion: out.suggestion, thread: [...(s.thread ?? []), { role: "user" as const, text, at: now }, { role: "ai" as const, text: out.reply, at: now }].slice(-20) };
     // relê para não sobrescrever outra sugestão aceita enquanto a IA respondia
-    const fresh = await myResume(userId);
-    await q.updateResumeText(userId, fresh.text, { ...fresh.analysis, suggestions: fresh.analysis.suggestions.map((x) => (x.id === id ? next : x)) });
+    const fresh = await myCv(userId, cvId);
+    await q.updateCvAnalysis(fresh.id, { ...fresh.analysis, suggestions: fresh.analysis.suggestions.map((x) => (x.id === id ? next : x)) });
     refresh();
     return next;
   });

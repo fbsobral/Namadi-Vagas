@@ -10,7 +10,7 @@ import type { Search } from "@/lib/types";
 import { canManage, roleLabel, type Role } from "@/lib/roles";
 
 /** Barra de quem pode editar: a dona, ou convidados com "Pode editar"/"Pode gerenciar". */
-export function SearchToolbar({ search, unseen, role = "owner", ownerName = null }: { search: Search; unseen: number; role?: Role; ownerName?: string | null }) {
+export function SearchToolbar({ search, unseen, role = "owner", ownerName = null, cvSlot }: { search: Search; unseen: number; role?: Role; ownerName?: string | null; cvSlot?: React.ReactNode }) {
   const owner = role === "owner";
   const router = useRouter();
   const [pending, start] = useTransition();
@@ -44,6 +44,7 @@ export function SearchToolbar({ search, unseen, role = "owner", ownerName = null
       <button className={btn} onClick={() => setEdit(true)}><Pencil className="size-4" /> Editar</button>
       {canManage(role) && <button className={btn} onClick={() => setShare(true)}><Share2 className="size-4" /> Compartilhar{(search.shared_count ?? 0) > 0 ? <span className="rounded-full bg-accent-soft px-1.5 text-xs text-accent">{search.shared_count}</span> : null}</button>}
       {unseen > 0 && <button className={btn} onClick={() => attempt(async () => { await seeAll(search.id); })}><CheckCheck className="size-4" /> Marcar vistas</button>}
+      {cvSlot}
       {!owner && <MyEmail search={search} />}
       {!owner ? <LeaveButton searchId={search.id} /> : confirm ? (
         <span className="anim-pop inline-flex items-center gap-1 rounded-full border border-accent bg-accent-soft py-1 pr-1 pl-4 text-sm text-accent">
@@ -105,12 +106,13 @@ function LeaveButton({ searchId }: { searchId: string }) {
 }
 
 /** Barra de quem só pode ver: acompanha a busca, mas quem administra é a dona (ou quem gerencia). */
-export function SharedToolbar({ search, unseen, ownerName }: { search: Search; unseen: number; ownerName: string | null }) {
+export function SharedToolbar({ search, unseen, ownerName, cvSlot }: { search: Search; unseen: number; ownerName: string | null; cvSlot?: React.ReactNode }) {
   const [pending, start] = useTransition();
   return (
     <div className="flex flex-wrap items-center gap-2">
       <SharedBadge ownerName={ownerName} role="viewer" />
       {unseen > 0 && <button className={chipBtn} disabled={pending} onClick={() => start(async () => { await seeAll(search.id); })}><CheckCheck className="size-4" /> Marcar vistas</button>}
+      {cvSlot}
       <MyEmail search={search} />
       <LeaveButton searchId={search.id} />
     </div>

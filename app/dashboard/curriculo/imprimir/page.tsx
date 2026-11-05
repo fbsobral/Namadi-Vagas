@@ -1,15 +1,16 @@
 import { redirect } from "next/navigation";
 import { getUserId } from "@/lib/auth";
-import { getResume } from "@/lib/db";
+import { getCv, getPrimaryCv } from "@/lib/db";
 import { PrintButton } from "./print-button";
 
 export const dynamic = "force-dynamic";
 
 /** Versão limpa do currículo para imprimir ou salvar como PDF pelo navegador. */
-export default async function PrintResume() {
+export default async function PrintResume({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const userId = await getUserId();
   if (!userId) redirect("/sign-in");
-  const resume = await getResume(userId);
+  const cvId = (await searchParams).cv;
+  const resume = typeof cvId === "string" ? await getCv(userId, cvId) : await getPrimaryCv(userId);
   if (!resume) redirect("/dashboard/curriculo");
 
   // linhas que parecem título de seção (curtas, sem ponto final) viram cabeçalhos

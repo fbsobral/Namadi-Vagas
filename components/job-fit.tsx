@@ -4,17 +4,22 @@ import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Check, Copy, FileText, Loader2, PenLine, RefreshCw, Sparkles, Star } from "lucide-react";
-import { coverLetterAction, jobFitAction } from "@/app/actions";
+import { coverLetterAction, getJobFitAction, jobFitAction } from "@/app/actions";
+import type { CvOption } from "./cv-select";
 import { fitLabel, type JobFitRow } from "@/lib/resume-shared";
 import { ScoreRing } from "./score-ring";
 import { useAiFlags } from "./ai-flags";
 
 /** "Seu currículo x esta vaga": compatibilidade, o que falta, currículo adaptado e carta de apresentação. */
-export function JobFit({ jobId, hasResume, resumeAt, initial }: { jobId: string; hasResume: boolean; resumeAt: number | null; initial: JobFitRow | null }) {
+export function JobFit({ jobId, cvs, cvId, initial }: { jobId: string; cvs: CvOption[]; cvId: string | null; initial: JobFitRow | null }) {
   const router = useRouter();
   const flags = useAiFlags();
+  // currículo comparado: o que a busca da vaga usa; dá para comparar com outro sem mudar a busca
+  const [sel, setSel] = useState(cvId ?? cvs.find((c) => c.is_primary)?.id ?? cvs[0]?.id ?? null);
   const [row, setRow] = useState(initial);
   const [letter, setLetter] = useState(initial?.letter ?? null);
+  const hasResume = cvs.length > 0;
+  const resumeAt = cvs.find((c) => c.id === sel)?.updated_at ?? null;
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState<"fit" | "letter" | null>(null);
   const [, start] = useTransition();
@@ -22,7 +27,7 @@ export function JobFit({ jobId, hasResume, resumeAt, initial }: { jobId: string;
   const runFit = (force: boolean) => {
     setErr(null); setBusy("fit");
     start(async () => {
-      const r = await jobFitAction(jobId, force);
+      const r = await jobFitAction(jobId, force, sel);
       setBusy(null);
       if (!r.ok) return setErr(r.error);
       setRow(r.data);
@@ -32,11 +37,16 @@ export function JobFit({ jobId, hasResume, resumeAt, initial }: { jobId: string;
   const runLetter = () => {
     setErr(null); setBusy("letter");
     start(async () => {
-      const r = await coverLetterAction(jobId);
+      const r = await coverLetterAction(jobId, sel);
       setBusy(null);
       if (!r.ok) return setErr(r.error);
       setLetter(r.data);
     });
+  };
+
+  const pick = (id: string) => {
+    setSel(id); setErr(null); setRow(null); setLetter(null);
+    start(async () => { const r = await getJobFitAction(jobId, id); setRow(r); setLetter(r?.letter ?? null); });
   };
 
   const fit = row?.fit ?? null;
@@ -53,6 +63,16 @@ export function JobFit({ jobId, hasResume, resumeAt, initial }: { jobId: string;
         </div>
         {fit && !fit.quick && flags.fit && <button disabled={!!busy} onClick={() => runFit(true)} className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-line bg-surface px-3 py-1.5 text-[13px] font-medium transition hover:bg-surface-2 disabled:opacity-50"><RefreshCw className={`size-3.5 ${busy === "fit" ? "spin" : ""}`} /> Refazer</button>}
       </div>
+
+      {cvs.length > 1 && (
+        <label className="mt-4 flex flex-wrap items-center gap-2 text-sm">
+          <span className="text-ink-3">Comparar com</span>
+          <select value={sel ?? ""} onChange={(e) => pick(e.target.value)} disabled={!!busy}
+            className="min-h-10 max-w-full rounded-full border border-line bg-surface px-3 text-sm font-medium outline-none focus:border-accent">
+            {cvs.map((c) => <option key={c.id} value={c.id}>{c.name}{c.id === cvId ? " (desta busca)" : ""}</option>)}
+          </select>
+        </label>
+      )}
 
       {!hasResume ? (
         <div className="mt-5 rounded-2xl border border-dashed border-line bg-surface/60 p-5 text-center">

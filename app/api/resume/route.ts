@@ -1,13 +1,16 @@
 import { getUserId } from "@/lib/auth";
 import { analyzeResume, CV_MAX_BYTES, CvError, fileContent } from "@/lib/resume";
-import { rateLimit, saveResume } from "@/lib/db";
+import { countCvs, createCv, getCv, MAX_CVS, rateLimit, saveCvAnalysis } from "@/lib/db";
 import { getAiConfig } from "@/lib/ai-config";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 180;
 
 
-/** Envia um currículo para o módulo Currículo: a IA lê, pontua e o TEXTO fica guardado (o arquivo é descartado). */
+/**
+ * Envia um currículo para o módulo Currículo: a IA lê, pontua (para o cargo-alvo, se houver) e o TEXTO fica guardado
+ * (o arquivo é descartado). Com `cvId`, substitui aquele currículo; sem, cria um novo (até MAX_CVS).
+ */
 export async function POST(req: Request) {
   const userId = await getUserId();
   if (!userId) return Response.json({ error: "Não autenticado" }, { status: 401 });
@@ -19,13 +22,26 @@ export async function POST(req: Request) {
   if (!(file instanceof File) || file.size === 0) return Response.json({ error: "Envie um arquivo." }, { status: 400 });
   if (file.size > CV_MAX_BYTES) return Response.json({ error: "O arquivo passa de 5 MB." }, { status: 413 });
 
+  const cvId = String(form?.get("cvId") ?? "");
+  const clean = (v: unknown, max: number) => String(v ?? "").replace(/\s+/g, " ").trim().slice(0, max);
+  const existing = cvId ? await getCv(userId, cvId) : null;
+  if (cvId && !existing) return Response.json({ error: "Currículo não encontrado." }, { status: 404 });
+  if (!existing && (await countCvs(userId)) >= MAX_CVS) return Response.json({ error: `Você já tem ${MAX_CVS} currículos. Apague um para enviar outro.` }, { status: 400 });
+  const target = existing ? existing.target_role : clean(form?.get("target"), 120);
+
   try {
     const DAILY = (await getAiConfig()).features.resume.daily;
     await rateLimit("resume", userId, DAILY, 86400_000, `Limite de ${DAILY} análises de currículo por dia atingido. Tente amanhã.`);
     const content = await fileContent({ name: file.name, type: file.type, buffer: Buffer.from(await file.arrayBuffer()) });
-    const { text, analysis } = await analyzeResume(content);
-    await saveResume(userId, file.name.slice(0, 120), text, analysis);
-    return Response.json({ ok: true });
+    const { text, analysis } = await analyzeResume(content, target);
+    const fileName = file.name.slice(0, 120);
+    if (existing) {
+      await saveCvAnalysis(existing.id, fileName, text, analysis);
+      return Response.json({ ok: true, id: existing.id });
+    }
+    const name = clean(form?.get("name"), 60) || target || analysis.role || "Meu currículo";
+    const id = await createCv(userId, { name, target_role: target, file_name: fileName, text, analysis });
+    return Response.json({ ok: true, id });
   } catch (e) {
     if (e instanceof CvError) return Response.json({ error: e.message }, { status: e.status });
     const msg = e instanceof Error ? e.message : "";

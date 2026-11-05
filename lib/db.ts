@@ -5,6 +5,7 @@ import { safeUrl } from "./safe-url";
 import { isMemberRole, type MemberRole, type Role } from "./roles";
 import type { Contact, Job, Search } from "./types";
 import type { JobFit, JobFitRow, Resume, ResumeAnalysis } from "./resume-shared";
+import { randomUUID as uuid } from "node:crypto";
 
 // BIGINT (timestamps em ms) e COUNT() voltam como número em vez de string.
 types.setTypeParser(20, (v) => Number(v));
@@ -177,6 +178,51 @@ CREATE TABLE IF NOT EXISTS job_fit (
 );
 CREATE INDEX IF NOT EXISTS idx_job_fit_user ON job_fit(user_id, score DESC);
 
+-- vários currículos por pessoa, cada um com nome e cargo-alvo; um é o principal (resumes/job_fit acima são legado, migrados abaixo)
+CREATE TABLE IF NOT EXISTS cvs (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  name TEXT NOT NULL DEFAULT '',
+  target_role TEXT NOT NULL DEFAULT '',
+  is_primary INTEGER NOT NULL DEFAULT 0,
+  file_name TEXT NOT NULL DEFAULT '',
+  text TEXT NOT NULL,
+  analysis TEXT NOT NULL,
+  created_at BIGINT NOT NULL,
+  updated_at BIGINT NOT NULL,
+  analyzed_at BIGINT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_cvs_user ON cvs(user_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_cvs_primary ON cvs(user_id) WHERE is_primary = 1;
+
+-- compatibilidade e carta por vaga, pessoa e CURRÍCULO
+CREATE TABLE IF NOT EXISTS job_fits (
+  job_id TEXT NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL,
+  cv_id TEXT NOT NULL REFERENCES cvs(id) ON DELETE CASCADE,
+  score INTEGER,
+  fit TEXT,
+  letter TEXT,
+  resume_at BIGINT NOT NULL,
+  updated_at BIGINT NOT NULL,
+  PRIMARY KEY (job_id, user_id, cv_id)
+);
+CREATE INDEX IF NOT EXISTS idx_job_fits_user ON job_fits(user_id, cv_id);
+
+-- qual currículo cada pessoa usa em cada busca (sem linha = o principal)
+CREATE TABLE IF NOT EXISTS search_cv (
+  search_id TEXT NOT NULL REFERENCES searches(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL,
+  cv_id TEXT NOT NULL REFERENCES cvs(id) ON DELETE CASCADE,
+  PRIMARY KEY (search_id, user_id)
+);
+
+-- preferências da pessoa
+CREATE TABLE IF NOT EXISTS user_prefs (
+  user_id TEXT PRIMARY KEY,
+  auto_fit INTEGER NOT NULL DEFAULT 1
+);
+
 -- empresas classificadas por IA (modelo de negócio, setor, porte), para os segmentos das buscas; uma vez por empresa
 CREATE TABLE IF NOT EXISTS companies (
   key TEXT PRIMARY KEY,
@@ -228,6 +274,17 @@ async function ready() {
           SELECT id,user_id,favorite,favorited_at,seen,stage,stage_pos FROM jobs WHERE favorite=1 OR seen=1 OR stage IS NOT NULL
           ON CONFLICT DO NOTHING`);
         await p.query("INSERT INTO kv (key,value,updated_at) VALUES ('migrated_job_user','1',$1) ON CONFLICT (key) DO NOTHING", [Date.now()]);
+      }
+      // Migração única: o currículo único de cada pessoa vira o principal da lista de currículos, com as notas e cartas.
+      if (!(await p.query("SELECT 1 FROM kv WHERE key='migrated_cvs'")).rowCount) {
+        await p.query(`INSERT INTO cvs (id,user_id,name,target_role,is_primary,file_name,text,analysis,created_at,updated_at,analyzed_at)
+          SELECT 'cv-'||md5(user_id), user_id, COALESCE(NULLIF(analysis::json->>'role',''),'Meu currículo'), '', 1, file_name, text, analysis, created_at, updated_at, analyzed_at FROM resumes
+          ON CONFLICT DO NOTHING`);
+        await p.query(`INSERT INTO job_fits (job_id,user_id,cv_id,score,fit,letter,resume_at,updated_at)
+          SELECT f.job_id, f.user_id, 'cv-'||md5(f.user_id), f.score, f.fit, f.letter, f.resume_at, f.updated_at FROM job_fit f
+          WHERE EXISTS (SELECT 1 FROM cvs c WHERE c.id = 'cv-'||md5(f.user_id)) ON CONFLICT DO NOTHING`);
+        await p.query("INSERT INTO user_prefs (user_id, auto_fit) SELECT user_id, auto_fit FROM resumes ON CONFLICT DO NOTHING");
+        await p.query("INSERT INTO kv (key,value,updated_at) VALUES ('migrated_cvs','1',$1) ON CONFLICT (key) DO NOTHING", [Date.now()]);
       }
       // Travas de busca expiram sozinhas (STALE_LOCK_MS); só os contatos "pendentes" órfãos precisam de reset.
       await p.query("UPDATE jobs SET contacts_status='error', contacts_error='Interrompido' WHERE contacts_status='pending'");
@@ -431,14 +488,19 @@ const COMPANY_KEY_SQL = "lower(regexp_replace(trim(j.company), '\\s+', ' ', 'g')
 const PENDING_MS = 4 * 60_000; // busca de contatos 'pendente' há mais que isso é considerada travada
 const JOB_COLS = `j.*, (j.contacts_status = 'pending' AND COALESCE(j.contacts_at, 0) < ${Date.now() - PENDING_MS}) AS contacts_stale, s.name AS search_name, s.color AS search_color, (s.user_id = ?) AS is_owner,
        COALESCE(u.favorite, 0) AS favorite, u.favorited_at AS favorited_at, COALESCE(u.seen, 0) AS seen, u.stage AS stage, COALESCE(u.stage_pos, 0) AS stage_pos,
-       f.score AS fit_score, f.resume_at AS fit_resume_at, co.model AS co_model, co.industry AS co_industry, co.size AS co_size`;
-const JOB_FROM = `FROM jobs j JOIN searches s ON s.id = j.search_id LEFT JOIN job_user u ON u.job_id = j.id AND u.user_id = ? LEFT JOIN job_fit f ON f.job_id = j.id AND f.user_id = ? LEFT JOIN companies co ON co.key = ${COMPANY_KEY_SQL}`;
+       f.score AS fit_score, f.resume_at AS fit_resume_at, ec.id AS cv_id, ec.name AS cv_name, ec.updated_at AS cv_updated_at, co.model AS co_model, co.industry AS co_industry, co.size AS co_size`;
+const JOB_FROM = `FROM jobs j JOIN searches s ON s.id = j.search_id LEFT JOIN job_user u ON u.job_id = j.id AND u.user_id = ? 
+  LEFT JOIN search_cv sc ON sc.search_id = j.search_id AND sc.user_id = ?
+  LEFT JOIN cvs pc ON pc.user_id = ? AND pc.is_primary = 1
+  LEFT JOIN cvs ec ON ec.id = COALESCE(sc.cv_id, pc.id)
+  LEFT JOIN job_fits f ON f.job_id = j.id AND f.user_id = ? AND f.cv_id = ec.id
+  LEFT JOIN companies co ON co.key = ${COMPANY_KEY_SQL}`;
 
 export type FitFilter = "top" | "good" | "none";
 
 export function listJobs(userId: string, opts: { searchId?: string | null; filter: JobFilter; limit?: number; sort?: "recent" | "fit"; fit?: FitFilter | null }) {
   const where = [ACCESS];
-  const params: P[] = [userId, userId, userId, userId, userId]; // is_owner, join u, join f, acesso(2)
+  const params: P[] = [userId, userId, userId, userId, userId, userId, userId]; // is_owner, join u, sc, pc, f, acesso(2)
   if (opts.searchId) { where.push("j.search_id = ?"); params.push(opts.searchId); }
   where.push(opts.filter === "filtered" ? "j.filtered = 1" : "j.filtered = 0");
   if (opts.filter === "new") where.push("COALESCE(u.seen, 0) = 0");
@@ -477,7 +539,7 @@ export async function jobCounts(userId: string) {
 }
 
 export const getJob = (userId: string, id: string) =>
-  get<Job>(`SELECT ${JOB_COLS} ${JOB_FROM} WHERE j.id = ? AND ${ACCESS}`, userId, userId, userId, id, userId, userId); // is_owner, join u, join f, id, acesso(2)
+  get<Job>(`SELECT ${JOB_COLS} ${JOB_FROM} WHERE j.id = ? AND ${ACCESS}`, userId, userId, userId, userId, userId, id, userId, userId); // is_owner, join u, sc, pc, f, id, acesso(2)
 
 export const getJobById = (id: string) => get<Job>("SELECT * FROM jobs WHERE id=?", id);
 
@@ -772,83 +834,142 @@ export async function addSeenGuide(userId: string, id: string) {
 
 export const resetSeenGuides = (userId: string) => setKv(`onb:${userId}`, "[]");
 
-/* ---------- currículo ---------- */
+/* ---------- currículos (vários por pessoa) ---------- */
 
-type ResumeRow = Omit<Resume, "analysis"> & { analysis: string };
-const toResume = (r: ResumeRow | null): Resume | null => (r ? { ...r, analysis: JSON.parse(r.analysis) as ResumeAnalysis } : null);
+export const MAX_CVS = 5;
 
-export const getResume = async (userId: string) => toResume(await get<ResumeRow>("SELECT * FROM resumes WHERE user_id = ?", userId));
+type CvRow = Omit<Resume, "analysis"> & { analysis: string };
+const toCv = (r: CvRow | null): Resume | null => (r ? { ...r, is_primary: Number(r.is_primary), analysis: JSON.parse(r.analysis) as ResumeAnalysis } : null);
 
-/** Nova análise (arquivo novo ou reanálise do texto atual). */
-export async function saveResume(userId: string, fileName: string, text: string, analysis: ResumeAnalysis) {
+export const listCvs = async (userId: string) =>
+  (await all<CvRow>("SELECT * FROM cvs WHERE user_id = ? ORDER BY is_primary DESC, created_at ASC", userId)).map((r) => toCv(r)!);
+
+/** Um currículo da pessoa (confere que é dela). */
+export const getCv = async (userId: string, cvId: string) => toCv(await get<CvRow>("SELECT * FROM cvs WHERE id = ? AND user_id = ?", cvId, userId));
+
+export const getPrimaryCv = async (userId: string) => toCv(await get<CvRow>("SELECT * FROM cvs WHERE user_id = ? AND is_primary = 1", userId));
+
+/** O currículo que a pessoa usa numa busca: o escolhido para ela, senão o principal. */
+export async function effectiveCv(userId: string, searchId: string) {
+  return toCv(await get<CvRow>(
+    `SELECT c.* FROM cvs c WHERE c.id = COALESCE((SELECT cv_id FROM search_cv WHERE search_id = ? AND user_id = ?), (SELECT id FROM cvs WHERE user_id = ? AND is_primary = 1))`,
+    searchId, userId, userId,
+  ));
+}
+
+export const countCvs = async (userId: string) => Number((await get<{ n: number }>("SELECT COUNT(*)::int AS n FROM cvs WHERE user_id = ?", userId))?.n ?? 0);
+
+/** Cria um currículo; o primeiro da pessoa já nasce principal. */
+export async function createCv(userId: string, c: { name: string; target_role: string; file_name: string; text: string; analysis: ResumeAnalysis }) {
+  const id = uuid();
   const now = Date.now();
+  const first = (await countCvs(userId)) === 0;
   await run(
-    `INSERT INTO resumes (user_id, file_name, text, analysis, created_at, updated_at, analyzed_at) VALUES (?, ?, ?, ?, ?, ?, ?)
-     ON CONFLICT (user_id) DO UPDATE SET file_name = EXCLUDED.file_name, text = EXCLUDED.text, analysis = EXCLUDED.analysis, updated_at = EXCLUDED.updated_at, analyzed_at = EXCLUDED.analyzed_at`,
-    userId, fileName, text, JSON.stringify(analysis), now, now, now,
+    "INSERT INTO cvs (id,user_id,name,target_role,is_primary,file_name,text,analysis,created_at,updated_at,analyzed_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+    id, userId, c.name, c.target_role, first ? 1 : 0, c.file_name, c.text, JSON.stringify(c.analysis), now, now, now,
   );
+  return id;
 }
 
-/** Texto e sugestões editados (aceitar/ignorar sugestão, edição manual). Não muda a nota: ela é da última análise. */
-export const updateResumeText = (userId: string, text: string, analysis: ResumeAnalysis) =>
-  run("UPDATE resumes SET text = ?, analysis = ?, updated_at = ? WHERE user_id = ?", text, JSON.stringify(analysis), Date.now(), userId);
-
-export async function deleteResume(userId: string) {
-  await run("DELETE FROM job_fit WHERE user_id = ?", userId);
-  await run("DELETE FROM resumes WHERE user_id = ?", userId);
+/** Nova análise de um currículo existente (arquivo novo ou reanálise do texto atual). */
+export async function saveCvAnalysis(cvId: string, fileName: string, text: string, analysis: ResumeAnalysis) {
+  const now = Date.now();
+  await run("UPDATE cvs SET file_name = ?, text = ?, analysis = ?, updated_at = ?, analyzed_at = ? WHERE id = ?", fileName, text, JSON.stringify(analysis), now, now, cvId);
 }
 
-type FitRow = { job_id: string; score: number | null; fit: string | null; letter: string | null; resume_at: number; updated_at: number };
-const toFit = (r: FitRow | null): JobFitRow | null => (r ? { job_id: r.job_id, fit: r.fit ? (JSON.parse(r.fit) as JobFit) : null, letter: r.letter, resume_at: Number(r.resume_at), updated_at: Number(r.updated_at) } : null);
+/** Texto e sugestões editados (aceitar/ignorar/refinar sugestão, edição manual). Não muda a nota: ela é da última análise. */
+export const updateCvText = (cvId: string, text: string, analysis: ResumeAnalysis) =>
+  run("UPDATE cvs SET text = ?, analysis = ?, updated_at = ? WHERE id = ?", text, JSON.stringify(analysis), Date.now(), cvId);
 
-export const getJobFit = async (userId: string, jobId: string) => toFit(await get<FitRow>("SELECT * FROM job_fit WHERE job_id = ? AND user_id = ?", jobId, userId));
+/** Só sugestões (ignorar, conversa do refinar): não mexe no texto nem invalida as notas. */
+export const updateCvAnalysis = (cvId: string, analysis: ResumeAnalysis) =>
+  run("UPDATE cvs SET analysis = ? WHERE id = ?", JSON.stringify(analysis), cvId);
 
-export const saveJobFit = (userId: string, jobId: string, fit: JobFit, resumeAt: number) =>
+export const updateCvMeta = (userId: string, cvId: string, name: string, target: string) =>
+  run("UPDATE cvs SET name = ?, target_role = ? WHERE id = ? AND user_id = ?", name, target, cvId, userId);
+
+export async function setPrimaryCv(userId: string, cvId: string) {
+  await ready();
+  const c = await pool().connect();
+  try {
+    await c.query("BEGIN");
+    await c.query("UPDATE cvs SET is_primary = 0 WHERE user_id = $1 AND is_primary = 1", [userId]);
+    await c.query("UPDATE cvs SET is_primary = 1 WHERE id = $1 AND user_id = $2", [cvId, userId]);
+    await c.query("COMMIT");
+  } catch (e) { await c.query("ROLLBACK"); throw e; } finally { c.release(); }
+}
+
+/** Apaga um currículo (com as notas e cartas feitas com ele). Se era o principal, o mais recente assume. */
+export async function deleteCv(userId: string, cvId: string) {
+  const cv = await getCv(userId, cvId);
+  if (!cv) return;
+  await run("DELETE FROM cvs WHERE id = ? AND user_id = ?", cvId, userId);
+  if (cv.is_primary) {
+    const next = await get<{ id: string }>("SELECT id FROM cvs WHERE user_id = ? ORDER BY updated_at DESC LIMIT 1", userId);
+    if (next) await run("UPDATE cvs SET is_primary = 1 WHERE id = ?", next.id);
+  }
+}
+
+/** Escolhe o currículo da pessoa para uma busca (null = volta a usar o principal). Quem chama confere acesso à busca e dono do CV. */
+export const setSearchCv = (userId: string, searchId: string, cvId: string | null) =>
+  cvId
+    ? run("INSERT INTO search_cv (search_id, user_id, cv_id) VALUES (?, ?, ?) ON CONFLICT (search_id, user_id) DO UPDATE SET cv_id = EXCLUDED.cv_id", searchId, userId, cvId)
+    : run("DELETE FROM search_cv WHERE search_id = ? AND user_id = ?", searchId, userId);
+
+/** Currículo escolhido explicitamente por busca (para os seletores). */
+export async function searchCvMap(userId: string) {
+  const rows = await all<{ search_id: string; cv_id: string }>("SELECT search_id, cv_id FROM search_cv WHERE user_id = ?", userId);
+  return Object.fromEntries(rows.map((r) => [r.search_id, r.cv_id])) as Record<string, string>;
+}
+
+type FitRow = { job_id: string; cv_id: string; score: number | null; fit: string | null; letter: string | null; resume_at: number; updated_at: number };
+const toFit = (r: FitRow | null): JobFitRow | null => (r ? { job_id: r.job_id, cv_id: r.cv_id, fit: r.fit ? (JSON.parse(r.fit) as JobFit) : null, letter: r.letter, resume_at: Number(r.resume_at), updated_at: Number(r.updated_at) } : null);
+
+export const getJobFit = async (userId: string, jobId: string, cvId: string) =>
+  toFit(await get<FitRow>("SELECT * FROM job_fits WHERE job_id = ? AND user_id = ? AND cv_id = ?", jobId, userId, cvId));
+
+export const saveJobFit = (userId: string, jobId: string, cvId: string, fit: JobFit, resumeAt: number) =>
   run(
-    `INSERT INTO job_fit (job_id, user_id, score, fit, resume_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)
-     ON CONFLICT (job_id, user_id) DO UPDATE SET score = EXCLUDED.score, fit = EXCLUDED.fit, resume_at = EXCLUDED.resume_at, updated_at = EXCLUDED.updated_at`,
-    jobId, userId, fit.score, JSON.stringify(fit), resumeAt, Date.now(),
+    `INSERT INTO job_fits (job_id, user_id, cv_id, score, fit, resume_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT (job_id, user_id, cv_id) DO UPDATE SET score = EXCLUDED.score, fit = EXCLUDED.fit, resume_at = EXCLUDED.resume_at, updated_at = EXCLUDED.updated_at`,
+    jobId, userId, cvId, fit.score, JSON.stringify(fit), resumeAt, Date.now(),
   );
 
-export const saveLetter = (userId: string, jobId: string, letter: string, resumeAt: number) =>
+export const saveLetter = (userId: string, jobId: string, cvId: string, letter: string, resumeAt: number) =>
   run(
-    `INSERT INTO job_fit (job_id, user_id, letter, resume_at, updated_at) VALUES (?, ?, ?, ?, ?)
-     ON CONFLICT (job_id, user_id) DO UPDATE SET letter = EXCLUDED.letter, updated_at = EXCLUDED.updated_at`,
-    jobId, userId, letter, resumeAt, Date.now(),
+    `INSERT INTO job_fits (job_id, user_id, cv_id, letter, resume_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)
+     ON CONFLICT (job_id, user_id, cv_id) DO UPDATE SET letter = EXCLUDED.letter, updated_at = EXCLUDED.updated_at`,
+    jobId, userId, cvId, letter, resumeAt, Date.now(),
   );
 
-export type FitListItem = { job_id: string; score: number; title: string; company: string; location: string | null; source: string; search_color: string; updated_at: number };
+export const getAutoFit = async (userId: string) => ((await get<{ auto_fit: number }>("SELECT auto_fit FROM user_prefs WHERE user_id = ?", userId))?.auto_fit ?? 1) !== 0;
 
-/** Vagas já comparadas com o currículo, das mais compatíveis para as menos (só as que a pessoa ainda acessa). */
-export const listFits = (userId: string, limit = 8) =>
-  all<FitListItem>(
-    `SELECT f.job_id, f.score, j.title, j.company, j.location, j.source, s.color AS search_color, f.updated_at
-     FROM job_fit f JOIN jobs j ON j.id = f.job_id JOIN searches s ON s.id = j.search_id
-     WHERE f.user_id = ? AND f.score IS NOT NULL AND ${ACCESS} ORDER BY f.score DESC, f.updated_at DESC LIMIT ${Number(limit)}`,
-    userId, userId, userId,
-  );
-
-export const setAutoFit = (userId: string, on: boolean) => run("UPDATE resumes SET auto_fit = ? WHERE user_id = ?", on ? 1 : 0, userId);
+export const setAutoFit = (userId: string, on: boolean) =>
+  run("INSERT INTO user_prefs (user_id, auto_fit) VALUES (?, ?) ON CONFLICT (user_id) DO UPDATE SET auto_fit = EXCLUDED.auto_fit", userId, on ? 1 : 0);
 
 /** Quem deve ter a compatibilidade calculada sozinha nas vagas novas desta busca: dona e convidados com currículo e automático ligado. */
 export async function autoFitUsers(searchId: string) {
   const rows = await all<{ user_id: string }>(
-    `SELECT r.user_id FROM resumes r WHERE r.auto_fit = 1 AND (
-       r.user_id = (SELECT user_id FROM searches WHERE id = ?)
-       OR r.user_id IN (SELECT user_id FROM search_members WHERE search_id = ? AND status = 'accepted' AND user_id IS NOT NULL))`,
+    `SELECT DISTINCT c.user_id FROM cvs c LEFT JOIN user_prefs p ON p.user_id = c.user_id
+     WHERE COALESCE(p.auto_fit, 1) = 1 AND (
+       c.user_id = (SELECT user_id FROM searches WHERE id = ?)
+       OR c.user_id IN (SELECT user_id FROM search_members WHERE search_id = ? AND status = 'accepted' AND user_id IS NOT NULL))`,
     searchId, searchId,
   );
   return rows.map((r) => r.user_id);
 }
 
-export type FitJobItem = Pick<Job, "id" | "title" | "company" | "location" | "source" | "found_at" | "favorite" | "search_name" | "search_color" | "fit_score"> & { fit_resume_at: number | null };
+export type FitJobItem = Pick<Job, "id" | "title" | "company" | "location" | "source" | "found_at" | "favorite" | "search_id" | "search_name" | "search_color" | "fit_score"> & {
+  fit_resume_at: number | null; cv_id: string | null; cv_updated_at: number | null;
+};
 
-/** Todas as vagas visíveis (não filtradas) com a nota de compatibilidade, para a lista do módulo Currículo. */
-export async function listJobsForFit(userId: string, limit = 400): Promise<FitJobItem[]> {
+/** Vagas visíveis (não filtradas) com a nota de compatibilidade; com `cvId`, só as das buscas que usam esse currículo. */
+export async function listJobsForFit(userId: string, cvId?: string, limit = 400): Promise<FitJobItem[]> {
   const jobs = await listJobs(userId, { filter: "all", limit });
-  return jobs.map((j) => ({
+  return jobs.filter((j) => !cvId || j.cv_id === cvId).map((j) => ({
     id: j.id, title: j.title, company: j.company, location: j.location, source: j.source, found_at: j.found_at, favorite: j.favorite,
-    search_name: j.search_name, search_color: j.search_color, fit_score: j.fit_score ?? null, fit_resume_at: j.fit_resume_at ?? null,
+    search_id: j.search_id, search_name: j.search_name, search_color: j.search_color, fit_score: j.fit_score ?? null,
+    fit_resume_at: j.fit_resume_at ?? null, cv_id: j.cv_id ?? null, cv_updated_at: j.cv_updated_at ?? null,
   }));
 }
 
@@ -894,7 +1015,7 @@ export const saveCompany = (c: CompanyRow) =>
 /** Vagas de uma busca para (re)aplicar os segmentos: as que não foram mantidas à mão. */
 export const jobsForSegments = (searchId: string) =>
   all<{ id: string; company: string; filtered: number; filtered_reason: string | null }>(
-    "SELECT id, company, filtered, filtered_reason FROM jobs WHERE search_id = ? AND filter_keep = 0", searchId,
+    "SELECT id, company, filtered, filtered_reason FROM jobs WHERE search_id = ? AND filter_keep = 0 ORDER BY found_at, id", searchId,
   );
 
 export const unfilterJob = (id: string) => run("UPDATE jobs SET filtered = 0, filtered_reason = NULL WHERE id = ?", id);

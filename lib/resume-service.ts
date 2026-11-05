@@ -25,51 +25,66 @@ async function jobForAi(userId: string, jobId: string) {
 }
 
 /** Compara (ou devolve a comparação guardada, se ainda vale para o currículo atual). `force` refaz. */
-export async function computeFit(userId: string, jobId: string, opts: { force?: boolean } = {}): Promise<JobFitRow> {
-  const r = await q.getResume(userId);
-  if (!r) throw new Error("Envie seu currículo primeiro, na área Currículo.");
-  const cur = await q.getJobFit(userId, jobId);
+/** Currículo para comparar com a vaga: o pedido (se for da pessoa) ou o que a busca da vaga usa. */
+async function cvFor(userId: string, searchId: string, cvId?: string | null) {
+  const cv = cvId ? await q.getCv(userId, cvId) : await q.effectiveCv(userId, searchId);
+  if (!cv) throw new Error("Envie seu currículo primeiro, na área Currículo.");
+  return cv;
+}
+
+export async function computeFit(userId: string, jobId: string, opts: { force?: boolean; cvId?: string | null } = {}): Promise<JobFitRow> {
+  const job = await q.getJob(userId, jobId);
+  if (!job) throw new Error("Vaga não encontrada");
+  const r = await cvFor(userId, job.search_id, opts.cvId);
+  const cur = await q.getJobFit(userId, jobId, r.id);
   // a análise completa substitui uma checagem rápida, mesmo que ela seja recente
   if (cur?.fit && !opts.force && !cur.fit.quick && cur.resume_at >= r.updated_at) return cur;
   await q.rateLimit("fit", userId, await daily("fit"), 86400_000, "Limite diário de análises completas atingido. Tente amanhã.");
   const fit = await fitJob(r.text, await jobForAi(userId, jobId));
-  await q.saveJobFit(userId, jobId, fit, r.updated_at);
-  return (await q.getJobFit(userId, jobId))!;
+  await q.saveJobFit(userId, jobId, r.id, fit, r.updated_at);
+  return (await q.getJobFit(userId, jobId, r.id))!;
 }
 
 /**
  * Checagem rápida de várias vagas: só nota e palavras-chave, em lotes de QUICK_BATCH por chamada,
- * com o perfil compacto do currículo. Pula as que já têm nota para o currículo atual (a não ser com `force`).
+ * com o perfil compacto do currículo que a busca de cada vaga usa. Pula as que já têm nota para esse currículo (a não ser com `force`).
  */
 export async function quickFitJobs(userId: string, jobIds: string[], opts: { auto?: boolean; force?: boolean } = {}) {
   const out: Record<string, { score?: number; error?: string }> = {};
-  const r = await q.getResume(userId);
-  if (!r) throw new Error("Envie seu currículo primeiro, na área Currículo.");
-  const profile = compactProfile(r.analysis);
+  type Todo = { id: string; title: string; company: string; location: string | null; text: string };
+  const groups = new Map<string, { cv: NonNullable<Awaited<ReturnType<typeof q.getCv>>>; jobs: Todo[] }>();
+  const bySearch = new Map<string, Awaited<ReturnType<typeof q.effectiveCv>>>();
 
-  const todo: { id: string; title: string; company: string; location: string | null; text: string }[] = [];
   for (const id of [...new Set(jobIds)]) {
-    const cur = await q.getJobFit(userId, id);
-    if (cur?.fit && !opts.force && cur.resume_at >= r.updated_at) { out[id] = { score: cur.fit.score }; continue; }
     const job = await q.getJob(userId, id);
     if (!job) { out[id] = { error: "Vaga não encontrada" }; continue; }
-    todo.push({ id, title: job.title, company: job.company, location: job.location, text: job.description || job.snippet || "" });
+    if (!bySearch.has(job.search_id)) bySearch.set(job.search_id, await q.effectiveCv(userId, job.search_id));
+    const cv = bySearch.get(job.search_id);
+    if (!cv) { out[id] = { error: "Envie seu currículo primeiro, na área Currículo." }; continue; }
+    const cur = await q.getJobFit(userId, id, cv.id);
+    if (cur?.fit && !opts.force && cur.resume_at >= cv.updated_at) { out[id] = { score: cur.fit.score }; continue; }
+    const g = groups.get(cv.id) ?? { cv, jobs: [] };
+    g.jobs.push({ id, title: job.title, company: job.company, location: job.location, text: job.description || job.snippet || "" });
+    groups.set(cv.id, g);
   }
 
-  for (let i = 0; i < todo.length; i += QUICK_BATCH) {
-    const chunk = todo.slice(i, i + QUICK_BATCH);
-    try {
-      if (opts.auto) await q.rateLimit("autofit", userId, await daily("autofit"), 86400_000, "Limite diário de verificações automáticas atingido.", chunk.length);
-      else await q.rateLimit("quickfit", userId, await daily("quickfit"), 86400_000, "Limite diário de verificações atingido. Tente amanhã.", chunk.length);
-      const fits = await quickFitBatch(profile, chunk, opts.auto ? "autofit" : "quickfit");
-      for (let k = 0; k < chunk.length; k++) {
-        await q.saveJobFit(userId, chunk[k].id, fits[k], r.updated_at);
-        out[chunk[k].id] = { score: fits[k].score };
+  outer: for (const { cv, jobs } of groups.values()) {
+    const profile = compactProfile(cv.analysis);
+    for (let i = 0; i < jobs.length; i += QUICK_BATCH) {
+      const chunk = jobs.slice(i, i + QUICK_BATCH);
+      try {
+        if (opts.auto) await q.rateLimit("autofit", userId, await daily("autofit"), 86400_000, "Limite diário de verificações automáticas atingido.", chunk.length);
+        else await q.rateLimit("quickfit", userId, await daily("quickfit"), 86400_000, "Limite diário de verificações atingido. Tente amanhã.", chunk.length);
+        const fits = await quickFitBatch(profile, chunk, opts.auto ? "autofit" : "quickfit");
+        for (let k = 0; k < chunk.length; k++) {
+          await q.saveJobFit(userId, chunk[k].id, cv.id, fits[k], cv.updated_at);
+          out[chunk[k].id] = { score: fits[k].score };
+        }
+      } catch (e) {
+        const error = e instanceof Error ? e.message : "Falhou.";
+        for (const j of chunk) out[j.id] = { error };
+        if (/Limite diário|desligado/.test(error)) break outer;
       }
-    } catch (e) {
-      const error = e instanceof Error ? e.message : "Falhou.";
-      for (const j of chunk) out[j.id] = { error };
-      if (/Limite diário/.test(error)) break;
     }
   }
   return out;

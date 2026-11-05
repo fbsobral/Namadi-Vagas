@@ -10,7 +10,7 @@ import type { Job } from "@/lib/types";
 import { ScoreRing, scoreTone } from "./score-ring";
 import { industryLabel, modelLabel, sizeLabel } from "@/lib/segments";
 
-export function JobCard({ job, href, showSearch, index, canKeep }: { job: Job; href: string; showSearch: boolean; index: number; canKeep: boolean }) {
+export function JobCard({ job, href, showSearch, index, canKeep, showCv = false }: { job: Job; href: string; showSearch: boolean; index: number; canKeep: boolean; showCv?: boolean }) {
   return (
     <article
       className="group anim-rise relative rounded-3xl border border-line bg-surface shadow-card transition duration-200 hover:-translate-y-0.5 hover:border-ink-3/40 hover:shadow-pop"
@@ -39,7 +39,7 @@ export function JobCard({ job, href, showSearch, index, canKeep }: { job: Job; h
               {(job.co_model || job.co_industry || job.co_size) && (
                 <span className="rounded-full border border-line px-2.5 py-1 text-ink-2" title="Empresa classificada por IA">{[modelLabel(job.co_model ?? null), industryLabel(job.co_industry ?? null), sizeLabel(job.co_size ?? null)].filter(Boolean).join(" · ")}</span>
               )}
-              {job.fit_score != null && <FitChip score={job.fit_score} />}
+              {job.fit_score != null && <FitChip score={job.fit_score} cvName={showCv ? job.cv_name ?? null : null} />}
               <span>encontrada {timeAgo(job.found_at)}</span>
               {job.filtered === 1 && job.filtered_reason && <span className="text-accent">filtrada: {job.filtered_reason}</span>}
               {job.favorite === 1 && job.contacts_status === "pending" && !job.contacts_stale && <span className="text-accent">buscando pessoas…</span>}
@@ -61,14 +61,15 @@ export function JobCard({ job, href, showSearch, index, canKeep }: { job: Job; h
 }
 
 /** Compatibilidade com o currículo, em destaque no cartão. */
-function FitChip({ score }: { score: number }) {
+function FitChip({ score, cvName }: { score: number; cvName: string | null }) {
   const top = score >= 85;
   return (
-    <span title="Compatibilidade com o seu currículo"
+    <span title={cvName ? `Compatibilidade com o currículo “${cvName}”` : "Compatibilidade com o seu currículo"}
       className={`inline-flex items-center gap-1.5 rounded-full border py-0.5 pr-2.5 pl-0.5 text-xs font-semibold ${top ? "border-ok/40 bg-ok-soft text-ok" : "border-line bg-surface"}`}
       style={top ? undefined : { color: scoreTone(score) }}>
       <ScoreRing value={score} size={22} stroke={3} hideValue label={`${score}% compatível`} />
       {score}% compatível <span className="font-medium opacity-80">· {top ? "top match" : score >= 70 ? "boa" : score >= 50 ? "média" : "baixa"}</span>
+      {cvName && <span className="hidden max-w-[120px] truncate font-normal text-ink-3 sm:inline">· {cvName}</span>}
     </span>
   );
 }

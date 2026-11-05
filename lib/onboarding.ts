@@ -8,7 +8,7 @@ export type VisualKey =
   | "radar" | "searchForm" | "robot" | "favContacts" | "kanban" | "emailShare" | "phone" | "cv" | "groups" | "exclude" | "sources"
   | "emailPreview" | "tabs" | "newBadge" | "toolbar" | "jobDetail" | "contactGroups" | "message" | "kanbanMove" | "boardFilter"
   | "invite" | "members" | "owner" | "sharedBanner" | "notifySelect" | "leave"
-  | "resumeScore" | "resumeChat" | "resumeFit" | "resumeLetter" | "resumeRefine" | "fitBulk" | "segments" | "listSort";
+  | "resumeScore" | "resumeChat" | "resumeFit" | "resumeLetter" | "resumeRefine" | "fitBulk" | "segments" | "listSort" | "cvTabs";
 
 export type GuideStep = {
   icon: IconKey;
@@ -151,8 +151,8 @@ export const GUIDES: Record<GuideId, Guide> = {
     label: "Lista de vagas",
     summary: "Abas, vagas novas, compatibilidade, favoritas e ações da busca",
     icon: "list",
-    version: 2,
-    news: "Agora cada vaga mostra a % de compatibilidade com o seu currículo, e a lista ordena e filtra por ela.",
+    version: 3,
+    news: "Cada busca agora compara as vagas com o currículo que você escolher na barra da busca.",
     steps: [
       {
         icon: "list",
@@ -167,7 +167,7 @@ export const GUIDES: Record<GuideId, Guide> = {
         visual: "listSort",
         title: "Novo: o quanto cada vaga combina com você",
         body: "Com o seu currículo na área Currículo, cada vaga ganha um anel com a % de compatibilidade. Ordene por “Mais compatíveis” ou filtre por Top match (85+), Boa ou mais (70+) ou Sem nota.",
-        bullets: ["Vagas novas já chegam com a nota", "As antigas você verifica na área Currículo, uma a uma ou todas de uma vez"],
+        bullets: ["Vagas novas já chegam com a nota", "A nota usa o currículo escolhido em “Currículo” na barra da busca", "As antigas você verifica na área Currículo, uma a uma ou todas de uma vez"],
       },
       {
         icon: "eye",
@@ -295,17 +295,24 @@ export const GUIDES: Record<GuideId, Guide> = {
   resume: {
     id: "resume",
     label: "Currículo com IA",
-    summary: "Nota, sugestões, refinar com a IA, compatibilidade com as vagas e carta",
+    summary: "Um currículo por objetivo, nota, sugestões, refinar com a IA, compatibilidade e carta",
     icon: "file",
-    version: 2,
-    news: "“Refinar com a IA” nas sugestões, nota automática em cada vaga nova e verificação em massa.",
+    version: 3,
+    news: "Agora você pode ter até 5 currículos, cada um para um cargo, e escolher qual cada busca usa.",
     steps: [
       {
         icon: "file",
         visual: "resumeScore",
         title: "Uma nota para o seu currículo",
         body: "Envie PDF, DOCX ou TXT. A IA dá uma nota de 0 a 100 e mostra onde você vai bem e onde perde pontos: abrangência, estrutura, clareza, impacto e leitura por sistemas de triagem (ATS).",
-        bullets: ["Guardamos só o texto, nunca o arquivo", "“Apagar” remove o currículo e todas as análises"],
+        bullets: ["Diga o cargo-alvo: a nota e as sugestões passam a ser para aquele cargo", "Guardamos só o texto, nunca o arquivo; “Apagar” remove tudo"],
+      },
+      {
+        icon: "file",
+        visual: "cvTabs",
+        title: "Novo: um currículo para cada objetivo",
+        body: "Tenha até 5 versões, cada uma com um cargo-alvo (ex.: Growth e Product). Crie enviando outro arquivo ou toque em “Adaptar um existente”: a IA reescreve o currículo para o novo cargo, sem inventar nada.",
+        bullets: ["Um deles é o principal", "Em cada busca, escolha na barra qual currículo comparar com as vagas"],
       },
       {
         icon: "sparkles",

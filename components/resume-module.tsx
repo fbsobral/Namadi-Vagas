@@ -3,9 +3,10 @@
 import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
-  Check, ChevronDown, MessageSquarePlus, Send, Download, FileText, Loader2, Pencil, Printer, RefreshCw, ShieldCheck, Sparkles, Star, Trash2, Upload, X,
+  Check, ChevronDown, MessageSquarePlus, Plus, Send, Download, FileText, Loader2, Pencil, Printer, RefreshCw, ShieldCheck, Sparkles, Star, Trash2, Upload, X,
 } from "lucide-react";
-import { acceptSuggestionAction, deleteResumeAction, dismissSuggestionAction, reanalyzeResumeAction, refineSuggestionAction, saveResumeTextAction } from "@/app/actions";
+import { acceptSuggestionAction, adaptCvAction, deleteCvAction, dismissSuggestionAction, reanalyzeResumeAction, refineSuggestionAction, saveResumeTextAction, setPrimaryCvAction, updateCvMetaAction } from "@/app/actions";
+import Link from "next/link";
 import { useAiFlags } from "./ai-flags";
 import { SUBSCORES, type Resume, type ResumeSuggestion } from "@/lib/resume-shared";
 import type { FitJobItem } from "@/lib/db";
@@ -15,25 +16,40 @@ import { Bar, ScoreRing } from "./score-ring";
 import { ModuleTip } from "./guide";
 
 type Quota = { left: number; limit: number };
+export type CvLite = { id: string; name: string; target_role: string; is_primary: number; score: number; updated_at: number };
+type UsedBy = { id: string; name: string; color: string }[];
+const MAX_CVS = 5;
 
-export function ResumeModule({ resume, jobs, quota, configured }: { resume: Resume | null; jobs: FitJobItem[]; quota: Quota; configured: boolean }) {
-  return resume ? <Loaded resume={resume} jobs={jobs} quota={quota} configured={configured} /> : <Empty configured={configured} />;
+export function ResumeModule({ cvs, cv, jobs, quota, configured, autoFit, usedBy }: {
+  cvs: CvLite[]; cv: Resume | null; jobs: FitJobItem[]; quota: Quota; configured: boolean; autoFit: boolean; usedBy: UsedBy;
+}) {
+  if (!cv) return <Empty configured={configured} />;
+  return (
+    <div className="mt-6 space-y-6">
+      <ModuleTip id="resume" />
+      <CvSwitcher cvs={cvs} current={cv.id} configured={configured} />
+      <CvHeader key={cv.id} cv={cv} usedBy={usedBy} />
+      <Loaded key={`l-${cv.id}`} resume={cv} jobs={jobs} quota={quota} configured={configured} autoFit={autoFit} />
+    </div>
+  );
 }
 
 /* ---------- envio ---------- */
 
-function useUpload(onDone: () => void) {
+function useUpload(onDone: (id: string) => void) {
   const [state, setState] = useState<{ t: "idle" } | { t: "busy"; name: string } | { t: "error"; msg: string }>({ t: "idle" });
-  const send = async (file: File) => {
+  const send = async (file: File, fields: { cvId?: string; target?: string } = {}) => {
     setState({ t: "busy", name: file.name });
     try {
       const body = new FormData();
       body.set("file", file);
+      if (fields.cvId) body.set("cvId", fields.cvId);
+      if (fields.target) body.set("target", fields.target);
       const res = await fetch("/api/resume", { method: "POST", body });
-      const json = (await res.json().catch(() => null)) as { error?: string } | null;
-      if (!res.ok || json?.error) throw new Error(json?.error ?? "Não consegui analisar o currículo.");
+      const json = (await res.json().catch(() => null)) as { error?: string; id?: string } | null;
+      if (!res.ok || json?.error || !json?.id) throw new Error(json?.error ?? "Não consegui analisar o currículo.");
       setState({ t: "idle" });
-      onDone();
+      onDone(json.id);
     } catch (e) {
       setState({ t: "error", msg: e instanceof Error ? e.message : "Não consegui analisar o currículo." });
     }
@@ -41,46 +57,56 @@ function useUpload(onDone: () => void) {
   return { state, send };
 }
 
-function Dropzone({ configured, compact }: { configured: boolean; compact?: boolean }) {
+/** Envio de arquivo. Com `cvId`, substitui aquele currículo; sem, cria um novo (com cargo-alvo opcional). */
+function Dropzone({ configured, compact, cvId, askTarget }: { configured: boolean; compact?: boolean; cvId?: string; askTarget?: boolean }) {
   const router = useRouter();
   const input = useRef<HTMLInputElement>(null);
   const [drag, setDrag] = useState(false);
-  const { state, send } = useUpload(() => router.refresh());
+  const [target, setTarget] = useState("");
+  const { state, send } = useUpload((id) => { if (id !== cvId) router.push(`/dashboard/curriculo?cv=${id}`); router.refresh(); });
   const busy = state.t === "busy";
+  const go = (f: File) => send(f, { cvId, target: target.trim() || undefined });
 
   return (
     <div>
+      {askTarget && (
+        <label className="mb-3 block">
+          <span className="mb-1.5 block text-sm font-medium">Para qual cargo é este currículo? <span className="font-normal text-ink-3">(opcional, deixa a análise mais precisa)</span></span>
+          <input value={target} onChange={(e) => setTarget(e.target.value)} maxLength={120} placeholder="ex.: Head de Growth, Product Manager sênior"
+            className="w-full rounded-xl border border-line bg-bg px-4 py-3 outline-none transition focus:border-accent focus:ring-4 focus:ring-accent/15" />
+        </label>
+      )}
       <button type="button" disabled={busy || !configured} onClick={() => input.current?.click()}
         onDragOver={(e) => { e.preventDefault(); setDrag(true); }} onDragLeave={() => setDrag(false)}
-        onDrop={(e) => { e.preventDefault(); setDrag(false); const f = e.dataTransfer.files[0]; if (f) send(f); }}
+        onDrop={(e) => { e.preventDefault(); setDrag(false); const f = e.dataTransfer.files[0]; if (f) go(f); }}
         className={`flex w-full items-center gap-4 rounded-3xl border-2 border-dashed text-left transition disabled:cursor-not-allowed ${compact ? "p-4" : "p-5 sm:p-7"} ${drag ? "border-accent bg-accent-soft" : "border-line bg-surface hover:border-accent/60"}`}>
         <span className={`grid shrink-0 place-items-center rounded-2xl bg-accent text-accent-ink ${compact ? "size-11" : "size-14"}`}>
           {busy ? <Loader2 className="spin size-6" /> : <Upload className="size-6" />}
         </span>
         <span className="min-w-0">
-          <span className="block font-semibold">{busy ? `Analisando ${state.name}…` : compact ? "Enviar outra versão" : "Envie seu currículo"}</span>
+          <span className="block font-semibold">{busy ? `Analisando ${state.name}…` : cvId ? "Enviar nova versão deste currículo" : "Envie seu currículo"}</span>
           <span className="block text-sm text-ink-3">{busy ? "A IA está lendo seção por seção. Leva uns 30 segundos." : "PDF, DOCX ou TXT, até 5 MB. Toque ou arraste o arquivo aqui."}</span>
         </span>
       </button>
-      <input ref={input} type="file" hidden accept=".pdf,.docx,.txt,.md,application/pdf" onChange={(e) => { const f = e.target.files?.[0]; if (f) send(f); e.target.value = ""; }} />
+      <input ref={input} type="file" hidden accept=".pdf,.docx,.txt,.md,application/pdf" onChange={(e) => { const f = e.target.files?.[0]; if (f) go(f); e.target.value = ""; }} />
       {state.t === "error" && <p role="alert" className="mt-3 rounded-xl bg-accent-soft px-4 py-2.5 text-sm text-accent">{state.msg}</p>}
-      {!configured && <p className="mt-3 rounded-xl bg-accent-soft px-4 py-2.5 text-sm text-accent">A IA ainda não está configurada no servidor (ANTHROPIC_API_KEY).</p>}
+      {!configured && <p className="mt-3 rounded-xl bg-accent-soft px-4 py-2.5 text-sm text-accent">A análise de currículo está desligada no momento.</p>}
     </div>
   );
 }
 
 function Empty({ configured }: { configured: boolean }) {
   const steps = [
-    { i: Star, t: "Nota do currículo", d: "Uma pontuação de 0 a 100, com abrangência, estrutura, clareza, impacto e leitura por ATS." },
-    { i: Sparkles, t: "Especialista com IA", d: "Sugestões seção por seção. Você aceita, edita ou ignora cada uma." },
-    { i: FileText, t: "Compatível com a vaga", d: "Em cada vaga, a % de compatibilidade, o que falta e o currículo adaptado." },
-    { i: Pencil, t: "Carta de apresentação", d: "Uma carta curta, escrita a partir do seu currículo e da vaga." },
+    { i: Star, t: "Nota do currículo", d: "Uma pontuação de 0 a 100 para o cargo que você quer, com abrangência, estrutura, clareza, impacto e leitura por ATS." },
+    { i: Sparkles, t: "Especialista com IA", d: "Sugestões seção por seção. Você aceita, edita, ignora ou refina cada uma com a IA." },
+    { i: FileText, t: "Um currículo por objetivo", d: "Até 5 versões, cada uma com um cargo-alvo, e cada busca compara as vagas com o currículo certo." },
+    { i: Pencil, t: "Vagas e carta", d: "A % de compatibilidade em cada vaga, o que falta, o currículo adaptado e a carta de apresentação." },
   ];
   return (
     <div className="mt-6 space-y-6">
       <ModuleTip id="resume" />
-      <Dropzone configured={configured} />
-      <p className="flex items-start gap-2 text-xs text-ink-3"><ShieldCheck className="mt-0.5 size-4 shrink-0 text-ok" /> Guardamos só o <strong className="font-medium text-ink-2">texto</strong> do currículo, para você aceitar sugestões e adaptar às vagas. O arquivo é descartado, e você apaga tudo quando quiser.</p>
+      <Dropzone configured={configured} askTarget />
+      <p className="flex items-start gap-2 text-xs text-ink-3"><ShieldCheck className="mt-0.5 size-4 shrink-0 text-ok" /> Guardamos só o <strong className="font-medium text-ink-2">texto</strong> do currículo, para você aceitar sugestões e comparar com as vagas. O arquivo é descartado, e você apaga tudo quando quiser.</p>
       <ol className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {steps.map(({ i: Icon, t, d }, n) => (
           <li key={t} className="anim-rise relative rounded-3xl border border-line bg-surface p-5 shadow-card" style={{ animationDelay: `${n * 60}ms` }}>
@@ -95,9 +121,139 @@ function Empty({ configured }: { configured: boolean }) {
   );
 }
 
+/* ---------- vários currículos ---------- */
+
+function CvSwitcher({ cvs, current, configured }: { cvs: CvLite[]; current: string; configured: boolean }) {
+  const [adding, setAdding] = useState(false);
+  const full = cvs.length >= MAX_CVS;
+  return (
+    <section>
+      <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] sm:mx-0 sm:flex-wrap sm:px-0 [&::-webkit-scrollbar]:hidden" role="tablist" aria-label="Seus currículos">
+        {cvs.map((c) => (
+          <Link key={c.id} href={`/dashboard/curriculo?cv=${c.id}`} scroll={false} role="tab" aria-selected={c.id === current}
+            className={`flex min-h-14 shrink-0 items-center gap-2.5 rounded-2xl border py-2 pr-4 pl-2 text-left transition ${c.id === current ? "border-ink bg-surface shadow-card" : "border-line bg-surface/60 hover:bg-surface"}`}>
+            <ScoreRing value={c.score} size={38} />
+            <span className="min-w-0">
+              <span className="flex items-center gap-1.5 text-sm font-semibold whitespace-nowrap">{c.name}{c.is_primary ? <span className="rounded-full bg-accent-soft px-1.5 text-[10px] font-semibold text-accent">principal</span> : null}</span>
+              <span className="block max-w-[180px] truncate text-xs text-ink-3">{c.target_role || "geral"}</span>
+            </span>
+          </Link>
+        ))}
+        <button type="button" onClick={() => setAdding((v) => !v)} disabled={full} aria-expanded={adding}
+          className="flex min-h-14 shrink-0 items-center gap-2 rounded-2xl border border-dashed border-line px-4 text-sm font-medium text-ink-2 transition hover:border-accent hover:text-accent disabled:opacity-50">
+          <Plus className="size-4" /> {full ? `Máximo de ${MAX_CVS}` : "Novo currículo"}
+        </button>
+      </div>
+      {adding && !full && <NewCv cvs={cvs} configured={configured} onDone={() => setAdding(false)} />}
+    </section>
+  );
+}
+
+function NewCv({ cvs, configured, onDone }: { cvs: CvLite[]; configured: boolean; onDone: () => void }) {
+  const router = useRouter();
+  const flags = useAiFlags();
+  const [mode, setMode] = useState<"adapt" | "upload">(cvs.length ? "adapt" : "upload");
+  const [from, setFrom] = useState(cvs.find((c) => c.is_primary)?.id ?? cvs[0]?.id ?? "");
+  const [target, setTarget] = useState("");
+  const [err, setErr] = useState<string | null>(null);
+  const [pending, start] = useTransition();
+  const adapt = () => start(async () => {
+    setErr(null);
+    const r = await adaptCvAction(from, target);
+    if (!r.ok) return setErr(r.error);
+    onDone();
+    router.push(`/dashboard/curriculo?cv=${r.data.id}`);
+  });
+  return (
+    <div className="anim-pop mt-3 rounded-3xl border border-line bg-surface p-5 shadow-card sm:p-6">
+      <div role="tablist" className="inline-flex rounded-full border border-line bg-bg p-0.5 text-sm">
+        {([["adapt", "Adaptar um existente"], ["upload", "Enviar outro arquivo"]] as const).map(([k, l]) => (
+          <button key={k} role="tab" aria-selected={mode === k} onClick={() => setMode(k)} disabled={k === "adapt" && !cvs.length}
+            className={`rounded-full px-3.5 py-1.5 whitespace-nowrap transition ${mode === k ? "bg-ink text-bg" : "text-ink-3 hover:text-ink"}`}>{l}</button>
+        ))}
+      </div>
+      {mode === "adapt" ? (
+        <div className="mt-4 space-y-3">
+          <p className="text-sm text-ink-2">A IA reescreve um currículo seu para outro cargo (reordena, destaca o que importa e usa o vocabulário da área), sem inventar nada, e já analisa a versão nova.</p>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="block"><span className="mb-1.5 block text-sm font-medium">A partir de</span>
+              <select value={from} onChange={(e) => setFrom(e.target.value)} className="w-full rounded-xl border border-line bg-bg px-3 py-3 text-sm outline-none focus:border-accent">
+                {cvs.map((c) => <option key={c.id} value={c.id}>{c.name}{c.target_role ? ` · ${c.target_role}` : ""}</option>)}
+              </select>
+            </label>
+            <label className="block"><span className="mb-1.5 block text-sm font-medium">Para o cargo</span>
+              <input value={target} onChange={(e) => setTarget(e.target.value)} maxLength={120} placeholder="ex.: Product Manager sênior"
+                onKeyDown={(e) => { if (e.key === "Enter" && target.trim().length > 1) adapt(); }}
+                className="w-full rounded-xl border border-line bg-bg px-3 py-3 text-sm outline-none focus:border-accent focus:ring-4 focus:ring-accent/15" />
+            </label>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <button disabled={pending || target.trim().length < 2 || !flags.resume} onClick={adapt}
+              className="inline-flex min-h-11 items-center gap-2 rounded-full bg-accent px-5 text-sm font-medium text-accent-ink disabled:opacity-50">
+              {pending ? <><Loader2 className="spin size-4" /> Adaptando… (uns 40 s)</> : <><Sparkles className="size-4" /> Criar versão adaptada</>}
+            </button>
+            <button onClick={onDone} className="min-h-11 rounded-full px-4 text-sm text-ink-3 hover:text-ink">Cancelar</button>
+          </div>
+          {err && <p role="alert" className="rounded-xl bg-accent-soft px-3 py-2 text-sm text-accent">{err}</p>}
+        </div>
+      ) : (
+        <div className="mt-4"><Dropzone configured={configured} askTarget /></div>
+      )}
+    </div>
+  );
+}
+
+function CvHeader({ cv, usedBy }: { cv: Resume; usedBy: UsedBy }) {
+  const router = useRouter();
+  const [editing, setEditing] = useState(false);
+  const [name, setName] = useState(cv.name);
+  const [target, setTarget] = useState(cv.target_role);
+  const [pending, start] = useTransition();
+  const save = () => start(async () => { await updateCvMetaAction(cv.id, name, target); setEditing(false); router.refresh(); });
+  const changedTarget = target.trim() !== cv.target_role.trim();
+  return (
+    <section className="anim-rise rounded-3xl border border-line bg-surface p-5 shadow-card sm:p-6">
+      {editing ? (
+        <div className="grid gap-3 sm:grid-cols-[1fr_1.3fr_auto] sm:items-end">
+          <label className="block"><span className="mb-1 block text-xs font-medium text-ink-3">Nome</span>
+            <input value={name} onChange={(e) => setName(e.target.value)} maxLength={60} className="w-full rounded-xl border border-line bg-bg px-3 py-2.5 text-sm outline-none focus:border-accent" /></label>
+          <label className="block"><span className="mb-1 block text-xs font-medium text-ink-3">Cargo-alvo</span>
+            <input value={target} onChange={(e) => setTarget(e.target.value)} maxLength={120} placeholder="vazio = análise geral" className="w-full rounded-xl border border-line bg-bg px-3 py-2.5 text-sm outline-none focus:border-accent" /></label>
+          <div className="flex gap-2">
+            <button disabled={pending} onClick={save} className="min-h-10 rounded-full bg-ink px-4 text-sm font-medium text-bg">{pending ? "Salvando…" : "Salvar"}</button>
+            <button onClick={() => { setEditing(false); setName(cv.name); setTarget(cv.target_role); }} className="min-h-10 rounded-full px-3 text-sm text-ink-3">Cancelar</button>
+          </div>
+          {changedTarget && <p className="text-xs text-ink-3 sm:col-span-3">Depois de salvar, toque em <strong className="font-medium text-ink-2">Reanalisar</strong> para a nota e as sugestões considerarem o novo cargo.</p>}
+        </div>
+      ) : (
+        <div className="flex flex-wrap items-start gap-3">
+          <div className="min-w-0 flex-1">
+            <p className="flex flex-wrap items-center gap-2">
+              <span className="font-display text-2xl leading-tight sm:text-3xl">{cv.name}</span>
+              {cv.is_primary ? <span className="rounded-full bg-accent-soft px-2 py-0.5 text-xs font-semibold text-accent">principal</span> : null}
+            </p>
+            <p className="mt-0.5 text-sm text-ink-2">Cargo-alvo: <strong className="font-medium text-ink">{cv.target_role || "geral (sem cargo definido)"}</strong></p>
+            <p className="mt-2 text-xs text-ink-3">
+              {usedBy.length ? <>Usado em {usedBy.length === 1 ? "1 busca" : `${usedBy.length} buscas`}: {usedBy.map((s) => s.name).join(", ")}.</> : "Nenhuma busca usa este currículo ainda."}
+              {" "}Troque o currículo de uma busca na barra da própria busca.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button onClick={() => setEditing(true)} className="inline-flex min-h-10 items-center gap-1.5 rounded-full border border-line px-4 text-sm font-medium hover:bg-surface-2"><Pencil className="size-4" /> Nome e cargo</button>
+            {!cv.is_primary && (
+              <button disabled={pending} onClick={() => start(async () => { await setPrimaryCvAction(cv.id); router.refresh(); })}
+                className="inline-flex min-h-10 items-center gap-1.5 rounded-full border border-line px-4 text-sm font-medium hover:bg-surface-2"><Star className="size-4" /> Tornar principal</button>
+            )}
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
 /* ---------- com currículo ---------- */
 
-function Loaded({ resume, jobs, quota, configured }: { resume: Resume; jobs: FitJobItem[]; quota: Quota; configured: boolean }) {
+function Loaded({ resume, jobs, quota, configured, autoFit }: { resume: Resume; jobs: FitJobItem[]; quota: Quota; configured: boolean; autoFit: boolean }) {
   const router = useRouter();
   const a = resume.analysis;
   const [pending, start] = useTransition();
@@ -109,7 +265,7 @@ function Loaded({ resume, jobs, quota, configured }: { resume: Resume; jobs: Fit
 
   const reanalyze = () => start(async () => {
     setMsg(null);
-    const r = await reanalyzeResumeAction();
+    const r = await reanalyzeResumeAction(resume.id);
     if (!r.ok) return setMsg({ ok: false, text: r.error });
     const diff = r.data.score - r.data.before;
     setMsg({ ok: true, text: diff > 0 ? `Nova nota: ${r.data.score} (+${diff}). Mandou bem!` : `Nova nota: ${r.data.score}.` });
@@ -127,9 +283,7 @@ function Loaded({ resume, jobs, quota, configured }: { resume: Resume; jobs: Fit
   const btn = "inline-flex min-h-10 shrink-0 items-center gap-2 rounded-full border border-line bg-surface px-4 py-2 text-sm font-medium whitespace-nowrap transition hover:bg-surface-2 disabled:opacity-50";
 
   return (
-    <div className="mt-6 space-y-6">
-      <ModuleTip id="resume" />
-
+    <div className="space-y-6">
       <div className="grid gap-4 lg:grid-cols-[1.15fr_1fr]">
         {/* pontuação */}
         <section className="anim-rise min-w-0 rounded-3xl border border-line bg-surface p-5 shadow-card sm:p-7">
@@ -169,11 +323,11 @@ function Loaded({ resume, jobs, quota, configured }: { resume: Resume; jobs: Fit
                 <RefreshCw className={`size-4 ${pending ? "spin" : ""}`} /> {pending ? "Analisando…" : "Reanalisar"}
               </button>
               <button className={btn} onClick={download}><Download className="size-4" /> .txt</button>
-              <a className={btn} href="/dashboard/curriculo/imprimir" target="_blank" rel="noopener"><Printer className="size-4" /> Imprimir / PDF</a>
+              <a className={btn} href={`/dashboard/curriculo/imprimir?cv=${resume.id}`} target="_blank" rel="noopener"><Printer className="size-4" /> Imprimir / PDF</a>
               {confirmDelete ? (
                 <span className="anim-pop inline-flex shrink-0 items-center gap-1 rounded-full border border-accent bg-accent-soft py-1 pr-1 pl-3 text-sm whitespace-nowrap text-accent">
-                  Apagar currículo e análises?
-                  <button className="rounded-full bg-accent px-3 py-1 font-medium text-accent-ink" onClick={() => start(async () => { await deleteResumeAction(); router.refresh(); })}>Apagar</button>
+                  Apagar este currículo e as notas dele?
+                  <button className="rounded-full bg-accent px-3 py-1 font-medium text-accent-ink" onClick={() => start(async () => { await deleteCvAction(resume.id); router.push("/dashboard/curriculo"); router.refresh(); })}>Apagar</button>
                   <button className="rounded-full px-2.5 py-1" onClick={() => setConfirmDelete(false)}>Não</button>
                 </span>
               ) : (
@@ -192,7 +346,7 @@ function Loaded({ resume, jobs, quota, configured }: { resume: Resume; jobs: Fit
             </div>
           )}
 
-          <Dropzone configured={configured} compact />
+          <Dropzone configured={configured} compact cvId={resume.id} />
         </section>
       </div>
 
@@ -209,7 +363,7 @@ function Loaded({ resume, jobs, quota, configured }: { resume: Resume; jobs: Fit
           <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-surface-2"><span className="block h-full rounded-full bg-ok transition-all" style={{ width: `${(done / a.suggestions.length) * 100}%` }} /></div>
         )}
         <ul className="mt-5 space-y-3">
-          {open.map((s, i) => <SuggestionCard key={s.id} s={s} i={i} />)}
+          {open.map((s, i) => <SuggestionCard key={s.id} cvId={resume.id} s={s} i={i} />)}
           {open.length === 0 && (
             <li className="rounded-2xl border border-dashed border-line px-5 py-8 text-center text-sm text-ink-3">
               Nenhuma sugestão pendente. {edited ? "Reanalise para ver a nova nota e receber novas sugestões." : "Seu currículo está em dia com esta análise."}
@@ -233,14 +387,14 @@ function Loaded({ resume, jobs, quota, configured }: { resume: Resume; jobs: Fit
         )}
       </section>
 
-      <ResumeText text={resume.text} />
+      <ResumeText key={resume.id} cvId={resume.id} text={resume.text} />
 
-      <FitList jobs={jobs} resumeAt={resume.updated_at} quota={quota} autoFit={resume.auto_fit !== 0} />
+      <FitList jobs={jobs} resumeAt={resume.updated_at} quota={quota} autoFit={autoFit} />
     </div>
   );
 }
 
-function SuggestionCard({ s: initial, i }: { s: ResumeSuggestion; i: number }) {
+function SuggestionCard({ cvId, s: initial, i }: { cvId: string; s: ResumeSuggestion; i: number }) {
   const flags = useAiFlags();
   const [refined, setRefined] = useState<ResumeSuggestion | null>(null);
   const s = refined && refined.id === initial.id && (refined.thread?.length ?? 0) >= (initial.thread?.length ?? 0) ? refined : initial;
@@ -260,7 +414,7 @@ function SuggestionCard({ s: initial, i }: { s: ResumeSuggestion; i: number }) {
     if (!text || thinking) return;
     setErr(null); setThinking(true);
     start(async () => {
-      const r = await refineSuggestionAction(s.id, text);
+      const r = await refineSuggestionAction(cvId, s.id, text);
       setThinking(false);
       if (!r.ok) return setErr(r.error);
       setRefined(r.data); setDraft(r.data.suggestion); setNote(""); setEditing(false);
@@ -314,7 +468,7 @@ function SuggestionCard({ s: initial, i }: { s: ResumeSuggestion; i: number }) {
         )}
 
         <div className="mt-3 flex flex-wrap gap-2">
-          <button disabled={pending || !draft.trim()} onClick={() => act(() => acceptSuggestionAction(s.id, editing ? draft : undefined))}
+          <button disabled={pending || !draft.trim()} onClick={() => act(() => acceptSuggestionAction(cvId, s.id, editing ? draft : undefined))}
             className="inline-flex min-h-10 items-center gap-1.5 rounded-full bg-ink px-4 text-sm font-medium text-bg transition hover:opacity-85 disabled:opacity-50">
             <Check className="size-4" /> {editing ? "Aplicar minha versão" : "Aceitar"}
           </button>
@@ -327,7 +481,7 @@ function SuggestionCard({ s: initial, i }: { s: ResumeSuggestion; i: number }) {
           <button disabled={pending} onClick={() => { setDraft(s.suggestion); setEditing((v) => !v); }} className="inline-flex min-h-10 items-center gap-1.5 rounded-full border border-line px-4 text-sm font-medium transition hover:bg-surface-2">
             <Pencil className="size-4" /> {editing ? "Cancelar" : "Editar"}
           </button>
-          {!editing && <button disabled={pending} onClick={() => act(() => dismissSuggestionAction(s.id))} className="inline-flex min-h-10 items-center rounded-full px-3 text-sm text-ink-3 transition hover:text-ink">Ignorar</button>}
+          {!editing && <button disabled={pending} onClick={() => act(() => dismissSuggestionAction(cvId, s.id))} className="inline-flex min-h-10 items-center rounded-full px-3 text-sm text-ink-3 transition hover:text-ink">Ignorar</button>}
         </div>
         {err && <p role="alert" className="mt-2 text-sm text-accent">{err}</p>}
       </div>
@@ -335,7 +489,7 @@ function SuggestionCard({ s: initial, i }: { s: ResumeSuggestion; i: number }) {
   );
 }
 
-function ResumeText({ text }: { text: string }) {
+function ResumeText({ cvId, text }: { cvId: string; text: string }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(text);
   const [pending, start] = useTransition();
@@ -356,7 +510,7 @@ function ResumeText({ text }: { text: string }) {
         <div className="mt-3 flex flex-wrap gap-2">
           {editing ? (
             <>
-              <button disabled={pending} onClick={() => start(async () => { setErr(null); try { await saveResumeTextAction(draft); setEditing(false); } catch (e) { setErr(e instanceof Error ? e.message : "Não salvou."); } })}
+              <button disabled={pending} onClick={() => start(async () => { setErr(null); try { await saveResumeTextAction(cvId, draft); setEditing(false); } catch (e) { setErr(e instanceof Error ? e.message : "Não salvou."); } })}
                 className="inline-flex min-h-10 items-center gap-1.5 rounded-full bg-ink px-4 text-sm font-medium text-bg">{pending ? "Salvando…" : "Salvar"}</button>
               <button onClick={() => { setDraft(text); setEditing(false); }} className="inline-flex min-h-10 items-center rounded-full border border-line px-4 text-sm font-medium">Cancelar</button>
             </>

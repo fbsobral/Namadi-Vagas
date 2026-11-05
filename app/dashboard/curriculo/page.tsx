@@ -3,7 +3,7 @@ import { UserButton } from "@clerk/nextjs";
 import { getUserId, getViewer, isAdminViewer } from "@/lib/auth";
 import { aiFlags } from "@/lib/ai-config";
 import { AiFlagsProvider } from "@/components/ai-flags";
-import { getKv, getResume, getSeenGuides, jobCounts, listJobsForFit, listSearches } from "@/lib/db";
+import { getAutoFit, getKv, getSeenGuides, jobCounts, listCvs, listJobsForFit, listSearches, searchCvMap } from "@/lib/db";
 import { fitQuota } from "@/lib/resume-service";
 import { isFresh } from "@/lib/format";
 import { Sidebar } from "@/components/sidebar";
@@ -13,12 +13,19 @@ import { ResumeModule } from "@/components/resume-module";
 
 export const dynamic = "force-dynamic";
 
-export default async function CurriculoPage() {
+export default async function CurriculoPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const userId = await getUserId();
   if (!userId) redirect("/sign-in");
-  const [searches, counts, viewer, seenGuides, beat, resume, jobs, quota, flags] = await Promise.all([
-    listSearches(userId), jobCounts(userId), getViewer(), getSeenGuides(userId), getKv("scheduler_heartbeat"), getResume(userId), listJobsForFit(userId), fitQuota(userId), aiFlags(),
+  const sp = await searchParams;
+  const [searches, counts, viewer, seenGuides, beat, cvs, quota, flags, autoFit, chosen] = await Promise.all([
+    listSearches(userId), jobCounts(userId), getViewer(), getSeenGuides(userId), getKv("scheduler_heartbeat"), listCvs(userId), fitQuota(userId), aiFlags(), getAutoFit(userId), searchCvMap(userId),
   ]);
+  // currículo aberto: o pedido na URL, senão o principal
+  const cv = cvs.find((c) => c.id === sp.cv) ?? cvs.find((c) => c.is_primary) ?? cvs[0] ?? null;
+  const jobs = cv ? await listJobsForFit(userId, cv.id) : [];
+  const primaryId = cvs.find((c) => c.is_primary)?.id;
+  const usedBy = cv ? searches.filter((s) => (chosen[s.id] ?? primaryId) === cv.id).map((s) => ({ id: s.id, name: s.name, color: s.color })) : [];
+  const lite = cvs.map((c) => ({ id: c.id, name: c.name, target_role: c.target_role, is_primary: c.is_primary, score: c.analysis.score, updated_at: c.updated_at }));
 
   return (
     <AiFlagsProvider flags={flags}>
@@ -40,9 +47,9 @@ export default async function CurriculoPage() {
                 <h1 className="font-display min-w-0 flex-1 text-4xl leading-none sm:text-6xl">Currículo</h1>
                 <HelpButton id="resume" className="mt-0.5 border border-line bg-surface sm:mt-2" />
               </div>
-              <p className="mt-3 max-w-2xl text-ink-2">Nota, sugestões seção por seção, compatibilidade com cada vaga e carta de apresentação.</p>
+              <p className="mt-3 max-w-2xl text-ink-2">Um currículo para cada objetivo, com nota, sugestões, compatibilidade com as vagas e carta de apresentação.</p>
             </header>
-            <ResumeModule resume={resume} jobs={jobs} quota={quota} configured={flags.resume} />
+            <ResumeModule cvs={lite} cv={cv} jobs={jobs} quota={quota} configured={flags.resume} autoFit={autoFit} usedBy={usedBy} />
           </div>
         </main>
       </div>

@@ -59,7 +59,16 @@ async function classifyBatch(names: string[]): Promise<(CompanyInfo | null)[]> {
 
 /** Garante a classificação das empresas (cache primeiro). Devolve o mapa nome→classificação; o que falhar fica de fora. */
 export async function ensureCompanies(ownerId: string, names: string[]) {
-  const byKey = new Map(names.filter((n) => n.trim()).map((n) => [companyKey(n), n.trim()]));
+  // a mesma empresa pode vir escrita de jeitos diferentes ("Stone", "stone"): manda para a IA a grafia mais "nome próprio"
+  const caps = (n: string) => (n.match(/\p{Lu}/gu) ?? []).length;
+  const byKey = new Map<string, string>();
+  for (const raw of names) {
+    const n = raw.trim();
+    if (!n) continue;
+    const k = companyKey(n);
+    const cur = byKey.get(k);
+    if (!cur || caps(n) > caps(cur)) byKey.set(k, n);
+  }
   const cached = await q.getCompanies([...byKey.keys()]);
   const missing = [...byKey.entries()].filter(([k]) => !cached.has(k));
   for (let i = 0; i < missing.length; i += BATCH) {

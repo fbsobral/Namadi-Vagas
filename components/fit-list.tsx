@@ -36,7 +36,7 @@ export function FitList({ jobs, resumeAt, quota, autoFit }: { jobs: FitJobItem[]
   const [, start] = useTransition();
 
   const score = (j: FitJobItem) => (rows[j.id]?.score !== undefined ? rows[j.id].score : j.fit_score);
-  const stale = (j: FitJobItem) => rows[j.id]?.score === undefined && j.fit_score != null && (j.fit_resume_at ?? 0) < resumeAt;
+  const stale = (j: FitJobItem) => rows[j.id]?.score === undefined && j.fit_score != null && (j.fit_resume_at ?? 0) < (j.cv_updated_at ?? resumeAt);
   const checked = (j: FitJobItem) => score(j) != null && !stale(j);
 
   const list = useMemo(() => {

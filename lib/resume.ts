@@ -66,7 +66,10 @@ const LetterOut = z.object({ letter: z.string() });
 
 const RULES = `Responda sempre em português do Brasil. Fale com a pessoa em segunda pessoa ("você"). Nunca invente experiência, cargo, empresa, número, certificação ou habilidade que o currículo não sustente: quando faltar um dado (ex.: um resultado em números), sugira o formato e marque o lugar com colchetes, como [X%].`;
 
+const TARGET = `Se a mensagem trouxer um CARGO-ALVO, avalie o currículo PARA ESSE CARGO: a nota mede o quanto ele convence um recrutador e um ATS dessa vaga; keywords são as que esse cargo pede e o currículo já tem; as sugestões aproximam o currículo do cargo (o que destacar, reordenar, reescrever com o vocabulário da área), sempre sem inventar nada. Sem cargo-alvo, avalie de forma geral.`;
+
 const ANALYZE = `Você é especialista em currículos e em sistemas de triagem (ATS) do mercado brasileiro. ${RULES}
+${TARGET}
 
 Se o documento NÃO for um currículo, devolva is_cv=false, textos vazios, números 0 e listas vazias.
 
@@ -165,8 +168,11 @@ export async function fileContent(file: { name: string; type: string; buffer: Bu
 const sid = (i: number) => `s${Date.now().toString(36)}${i}`;
 
 /** Analisa um currículo (arquivo novo ou o texto já guardado). Devolve o texto normalizado e a análise. */
-export async function analyzeResume(content: Anthropic.Beta.BetaContentBlockParam[]): Promise<{ text: string; analysis: ResumeAnalysis }> {
-  const o = await call("resume", ANALYZE, content, AnalysisOut, "medium");
+const withTarget = (content: Anthropic.Beta.BetaContentBlockParam[], target?: string): Anthropic.Beta.BetaContentBlockParam[] =>
+  target?.trim() ? [...content, { type: "text", text: `CARGO-ALVO: ${target.trim().slice(0, 120)}` }] : content;
+
+export async function analyzeResume(content: Anthropic.Beta.BetaContentBlockParam[], target?: string, system = ANALYZE): Promise<{ text: string; analysis: ResumeAnalysis }> {
+  const o = await call("resume", system, withTarget(content, target), AnalysisOut, "medium");
   if (!o.is_cv || o.text.trim().length < 80) throw new CvError("Esse arquivo não parece um currículo.");
   const text = o.text.trim().slice(0, 60_000);
   const byKey = new Map(o.subscores.map((s) => [s.key, s]));
@@ -196,7 +202,17 @@ export async function analyzeResume(content: Anthropic.Beta.BetaContentBlockPara
   };
 }
 
-export const analyzeText = (text: string) => analyzeResume([{ type: "text", text: `Este é o currículo:\n\n${text}\n\nAnalise.` }]);
+export const analyzeText = (text: string, target?: string) => analyzeResume([{ type: "text", text: `Este é o currículo:\n\n${text}\n\nAnalise.` }], target);
+
+const ADAPT = `Você é especialista em currículos e em sistemas de triagem (ATS) do mercado brasileiro. ${RULES}
+A pessoa quer uma VERSÃO do currículo para um CARGO-ALVO. Primeiro reescreva o currículo para esse cargo e depois analise a versão nova.
+- text: o currículo inteiro reescrito para o cargo-alvo, no mesmo idioma e formato (seções em linhas próprias, itens começando com "- "). Pode reordenar seções e itens, destacar o que é mais relevante para o cargo, reescrever o resumo e os itens com o vocabulário da área e enxugar o que pouco importa. Mantenha nomes, empresas, datas, cargos e números exatamente como estão; nunca acrescente experiência, habilidade ou resultado que o original não tenha.
+- O restante (role, profile, score, label, summary, subscores, strengths, keywords, suggestions) é a análise DA VERSÃO NOVA para o cargo-alvo, com as mesmas regras de sempre. Os trechos "original" das sugestões precisam existir exatamente em "text".
+Devolva is_cv=true.`;
+
+/** Cria uma versão do currículo para outro cargo (texto reescrito + análise da versão nova). */
+export const adaptResume = (text: string, target: string) =>
+  analyzeResume([{ type: "text", text: `Este é o currículo atual:\n\n${text}` }], target, ADAPT);
 
 type JobInput = { title: string; company: string; location: string | null; description: string };
 const jobBlock = (j: JobInput) => `VAGA: ${j.title} — ${j.company}${j.location ? ` (${j.location})` : ""}\n\n${j.description.slice(0, 20_000)}`;

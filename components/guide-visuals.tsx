@@ -598,6 +598,26 @@ const V: Record<VisualKey, () => React.ReactNode> = {
       </Screen>
     </Frame>
   ),
+
+  cvTabs: () => (
+    <Frame>
+      <div className="space-y-2">
+        <div className="flex gap-1.5">
+          {[["Growth", "Head de Growth", 84, true], ["Product", "Product Manager", 71, false]].map(([n, t, v, p], k) => (
+            <Screen key={n as string} className={`!flex flex-1 items-center gap-1.5 !p-1.5 ${k === 0 ? "!border-ink" : ""}`} style={d(k * 0.15)}>
+              <ScoreRing value={v as number} size={26} />
+              <span className="min-w-0"><span className="flex items-center gap-1 text-[10px] font-semibold">{n as string}{p ? <span className="rounded-full bg-accent-soft px-1 text-[7.5px] text-accent">principal</span> : null}</span><span className="block truncate text-[8.5px] text-ink-3">{t as string}</span></span>
+            </Screen>
+          ))}
+        </div>
+        <Screen className="!p-2.5" style={d(0.4)}>
+          <p className="font-display text-base leading-tight">Busca · Product</p>
+          <div className="mt-1.5 flex flex-wrap gap-1"><Btn primary><RefreshCw className="size-3" /> Rodar agora</Btn><Btn className="g-press !border-accent !text-accent"><FileText className="size-3" /> Currículo: Product <ChevronDown className="size-2.5" /></Btn></div>
+          <p className="mt-1.5 text-[9px] text-ink-3">as notas desta busca usam o currículo “Product”</p>
+        </Screen>
+      </div>
+    </Frame>
+  ),
 };
 
 function KanbanMini({ select = false }: { select?: boolean }) {

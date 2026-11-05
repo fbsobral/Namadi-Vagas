@@ -5,7 +5,7 @@ import { aiFlags } from "@/lib/ai-config";
 import { AiFlagsProvider } from "@/components/ai-flags";
 import { UserButton } from "@clerk/nextjs";
 import { AlertTriangle, Columns3, LayoutList, Radar as RadarIcon, Star } from "lucide-react";
-import { type FitFilter, boardCounts, filteredCount, getJob, getJobFit, getKv, getResume, getSeenGuides, pendingInvitesFor, jobCounts, listContacts, listJobs, listRuns, listSearches, type JobFilter } from "@/lib/db";
+import { type FitFilter, boardCounts, filteredCount, getJob, getJobFit, getKv, getSeenGuides, listCvs, searchCvMap, pendingInvitesFor, jobCounts, listContacts, listJobs, listRuns, listSearches, type JobFilter } from "@/lib/db";
 import { isDemoMode } from "@/lib/serp";
 import { freqLabel, sourceLabel } from "@/lib/sources";
 import { includeTerms, parseSpec, specToBoolean } from "@/lib/query";
@@ -20,6 +20,7 @@ import { RobotStatus, RunHistory } from "@/components/robot-status";
 import { NewSearchButton } from "@/components/new-search-button";
 import { KanbanBoard } from "@/components/kanban-board";
 import { OnboardingProvider } from "@/components/onboarding";
+import { CvSelect } from "@/components/cv-select";
 import { canEdit } from "@/lib/roles";
 import { HelpButton, ModuleTip } from "@/components/guide";
 
@@ -31,7 +32,8 @@ export default async function Dashboard({ searchParams }: PageProps<"/dashboard"
   const sp = await searchParams;
   const one = (k: string) => (typeof sp[k] === "string" ? (sp[k] as string) : null);
 
-  const [searches, counts, viewer, seenGuides, flags] = await Promise.all([listSearches(userId), jobCounts(userId), getViewer(), getSeenGuides(userId), aiFlags()]);
+  const [searches, counts, viewer, seenGuides, flags, cvRows, chosenCv] = await Promise.all([listSearches(userId), jobCounts(userId), getViewer(), getSeenGuides(userId), aiFlags(), listCvs(userId), searchCvMap(userId)]);
+  const cvs = cvRows.map((c) => ({ id: c.id, name: c.name, target_role: c.target_role, is_primary: c.is_primary, updated_at: c.updated_at }));
   const invites = await pendingInvitesFor(viewer?.emails ?? []);
   const current = searches.find((s) => s.id === one("s")) ?? null;
   const view = one("v") === "board" ? "board" : "list";
@@ -39,13 +41,15 @@ export default async function Dashboard({ searchParams }: PageProps<"/dashboard"
   // compatibilidade: ordenar (o=fit) e filtrar por faixa (c=top|good|none); só na lista
   const sort = view === "list" && one("o") === "fit" ? "fit" : "recent";
   const fitF = view === "list" && (["top", "good", "none"] as const).includes(one("c") as FitFilter) ? (one("c") as FitFilter) : null;
-  const [jobs, nFiltered, myResume] = await Promise.all([listJobs(userId, { searchId: current?.id, filter, sort, fit: fitF }), filteredCount(userId, current?.id ?? null), getResume(userId)]);
+  const [jobs, nFiltered] = await Promise.all([listJobs(userId, { searchId: current?.id, filter, sort, fit: fitF }), filteredCount(userId, current?.id ?? null)]);
+  const myResume = cvs.length > 0;
   const [beat, runs] = await Promise.all([getKv("scheduler_heartbeat"), current ? listRuns(current.id) : Promise.resolve([])]);
   const boardByS = view === "board" ? await boardCounts(userId) : ({} as Record<string, number>);
   const jobId = one("job");
   const drawerJob = jobId ? await getJob(userId, jobId) : null;
-  const resume = myResume;
-  const [contacts, fit] = drawerJob ? await Promise.all([listContacts(drawerJob.id), getJobFit(userId, drawerJob.id)]) : [[], null];
+  const [contacts, fit] = drawerJob
+    ? await Promise.all([listContacts(drawerJob.id), drawerJob.cv_id ? getJobFit(userId, drawerJob.id, drawerJob.cv_id) : Promise.resolve(null)])
+    : [[], null];
   const drawerSearch = drawerJob ? searches.find((s) => s.id === drawerJob.search_id) ?? null : null;
 
   const base = (extra: Record<string, string | null> = {}) => {
@@ -123,7 +127,7 @@ export default async function Dashboard({ searchParams }: PageProps<"/dashboard"
                   Última rodada {timeAgo(current.last_run_at)}{current.active && current.next_run_at ? ` · próxima ${timeAgo(current.next_run_at)}` : ""}
                 </p>
                 {current.last_status === "error" && <p className="mt-2 inline-flex items-center gap-2 rounded-lg bg-accent-soft px-3 py-1.5 text-sm text-accent"><AlertTriangle className="size-4" /> {current.last_error}</p>}
-                <div className="mt-5">{canEdit(myRole) ? <SearchToolbar search={current} role={myRole ?? "owner"} ownerName={current.owner_name ?? null} unseen={jobs.filter((j) => !j.seen).length} /> : <SharedToolbar search={current} unseen={jobs.filter((j) => !j.seen).length} ownerName={current.owner_name ?? null} />}</div>
+                <div className="mt-5">{canEdit(myRole) ? <SearchToolbar search={current} role={myRole ?? "owner"} ownerName={current.owner_name ?? null} unseen={jobs.filter((j) => !j.seen).length} cvSlot={<CvSelect searchId={current.id} cvs={cvs} value={chosenCv[current.id] ?? null} />} /> : <SharedToolbar search={current} unseen={jobs.filter((j) => !j.seen).length} ownerName={current.owner_name ?? null} cvSlot={<CvSelect searchId={current.id} cvs={cvs} value={chosenCv[current.id] ?? null} />} />}</div>
                 <RunHistory runs={runs} />
               </>
             ) : (
@@ -174,7 +178,7 @@ export default async function Dashboard({ searchParams }: PageProps<"/dashboard"
                   ))}
                 </div>
               )}
-              {jobs.map((j, i) => <JobCard key={j.id} job={j} index={i} showSearch={!current} canKeep={editableIds.has(j.search_id)} href={base({ job: j.id })} />)}
+              {jobs.map((j, i) => <JobCard key={j.id} job={j} index={i} showSearch={!current} canKeep={editableIds.has(j.search_id)} showCv={cvs.length > 1} href={base({ job: j.id })} />)}
               {jobs.length === 0 && fitF ? (
                 <p className="rounded-[28px] border border-dashed border-line bg-surface/50 px-6 py-12 text-center text-ink-2">Nenhuma vaga nessa faixa de compatibilidade. <Link href={base({ c: null })} scroll={false} className="font-medium text-accent underline underline-offset-4">Ver todas</Link></p>
               ) : jobs.length === 0 && <EmptyState hasSearches={searches.length > 0} current={!!current} filter={filter} running={current?.last_status === "running"} />}
@@ -183,7 +187,7 @@ export default async function Dashboard({ searchParams }: PageProps<"/dashboard"
         </div>
       </main>
 
-      {drawerJob && <JobDrawer job={drawerJob} contacts={contacts} closeHref={base()} terms={drawerSearch ? includeTerms(parseSpec(drawerSearch.query_spec, drawerSearch.query)) : []} resumeAt={resume?.updated_at ?? null} fit={fit} />}
+      {drawerJob && <JobDrawer job={drawerJob} contacts={contacts} closeHref={base()} terms={drawerSearch ? includeTerms(parseSpec(drawerSearch.query_spec, drawerSearch.query)) : []} cvs={cvs} cvId={drawerJob.cv_id ?? null} fit={fit} />}
     </div>
     </OnboardingProvider>
     </AiFlagsProvider>
