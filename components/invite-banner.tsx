@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Users } from "lucide-react";
 import { acceptInviteAction, declineInviteAction } from "@/app/actions";
 import type { PendingInvite } from "@/lib/db";
+import { isMemberRole, roleLabel } from "@/lib/roles";
 
 export function InviteBanner({ invites }: { invites: PendingInvite[] }) {
   const router = useRouter();
@@ -17,7 +18,7 @@ export function InviteBanner({ invites }: { invites: PendingInvite[] }) {
       {invites.map((i) => (
         <div key={i.id} className="flex flex-wrap items-center gap-3 rounded-2xl border border-accent/30 bg-accent-soft px-4 py-3">
           <span className="grid size-9 shrink-0 place-items-center rounded-full bg-accent text-accent-ink"><Users className="size-4" /></span>
-          <p className="min-w-0 flex-1 text-sm"><strong>{i.inviter_name ?? "Alguém"}</strong> compartilhou a busca <strong>“{i.search_name}”</strong> com você.</p>
+          <p className="min-w-0 flex-1 text-sm"><strong>{i.inviter_name ?? "Alguém"}</strong> compartilhou a busca <strong>“{i.search_name}”</strong> com você <span className="whitespace-nowrap text-ink-2">· {roleLabel(isMemberRole(i.role) ? i.role : "viewer").toLowerCase()}</span>.</p>
           <div className="flex gap-2">
             <button disabled={pending} onClick={() => start(async () => {
               setError(null);

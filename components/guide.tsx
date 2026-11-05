@@ -52,20 +52,23 @@ export function ModuleTip({ id, className = "" }: { id: GuideId; className?: str
   const guide = GUIDES[id];
   const Icon = ICONS[guide.icon];
   return (
-    <div role="note" className={`anim-rise relative flex items-start gap-3 rounded-2xl border border-accent/30 bg-accent-soft/60 p-3.5 pr-11 sm:items-center sm:p-4 sm:pr-12 ${className}`}>
-      <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-accent text-accent-ink"><Icon className="size-5" /></span>
-      <div className="min-w-0 flex-1 sm:flex sm:items-center sm:gap-4">
-        <div className="min-w-0 flex-1">
-          <p className="text-sm font-semibold">Primeira vez aqui? {guide.label}</p>
-          <p className="mt-0.5 text-[13px] text-ink-2">{guide.summary}.</p>
+    // @container: o layout segue a largura do espaço onde o aviso está (modal estreito ou página larga), não a da tela
+    <div role="note" className={`anim-rise @container rounded-2xl border border-accent/30 bg-accent-soft/60 ${className}`}>
+      <div className="relative flex items-start gap-3 p-3.5 pr-11 @xl:items-center @xl:p-4 @xl:pr-12">
+        <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-accent text-accent-ink"><Icon className="size-5" /></span>
+        <div className="min-w-0 flex-1 @xl:flex @xl:items-center @xl:gap-4">
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-semibold">Primeira vez aqui? {guide.label}</p>
+            <p className="mt-0.5 text-[13px] text-ink-2">{guide.summary}.</p>
+          </div>
+          <button type="button" onClick={() => g.open(id)}
+            className="mt-2.5 inline-flex min-h-10 shrink-0 items-center gap-1.5 rounded-full bg-ink px-4 py-2 text-sm font-medium whitespace-nowrap text-bg transition hover:opacity-85 @xl:mt-0">
+            <BookOpen className="size-4" /> Ver como funciona <span className="opacity-60">· {guide.steps.length} passos</span>
+          </button>
         </div>
-        <button type="button" onClick={() => g.open(id)}
-          className="mt-2.5 inline-flex min-h-10 shrink-0 items-center gap-1.5 rounded-full bg-ink px-4 py-2 text-sm font-medium whitespace-nowrap text-bg transition hover:opacity-85 sm:mt-0">
-          <BookOpen className="size-4" /> Ver como funciona <span className="opacity-60">· {guide.steps.length} passos</span>
-        </button>
+        <button type="button" onClick={() => g.dismiss(id)} aria-label="Dispensar dica"
+          className="absolute top-2 right-2 grid size-9 place-items-center rounded-full text-ink-3 transition hover:bg-surface hover:text-ink"><X className="size-4" /></button>
       </div>
-      <button type="button" onClick={() => g.dismiss(id)} aria-label="Dispensar dica"
-        className="absolute top-2 right-2 grid size-9 place-items-center rounded-full text-ink-3 transition hover:bg-surface hover:text-ink"><X className="size-4" /></button>
     </div>
   );
 }

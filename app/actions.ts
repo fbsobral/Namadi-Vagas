@@ -15,6 +15,7 @@ import { PALETTE, SOURCES } from "@/lib/sources";
 import { isStage } from "@/lib/stages";
 import { cleanSpec, specToQuery, type QuerySpec } from "@/lib/query";
 import { isGuideId } from "@/lib/onboarding";
+import { assignableRoles, canEdit, canManage, canManageMember, isMemberRole, type MemberRole } from "@/lib/roles";
 
 export type SearchInput = {
   name: string;
@@ -30,6 +31,22 @@ async function uid() {
   const userId = await getUserId();
   if (!userId) throw new Error("Não autenticado");
   return userId;
+}
+
+/** Garante que quem chama pode editar a busca (dona ou convidado com "Pode editar"/"Pode gerenciar"). */
+async function editable(userId: string, searchId: string) {
+  const a = await q.roleFor(userId, searchId);
+  if (!a) throw new Error("Busca não encontrada");
+  if (!canEdit(a.role)) throw new Error("Seu acesso a esta busca é só de leitura.");
+  return a;
+}
+
+/** Garante que quem chama pode gerenciar as pessoas da busca (dona ou "Pode gerenciar"). */
+async function manageable(userId: string, searchId: string) {
+  const a = await q.roleFor(userId, searchId);
+  if (!a) throw new Error("Busca não encontrada");
+  if (!canManage(a.role)) throw new Error("Só quem gerencia a busca pode convidar e mudar acessos.");
+  return a;
 }
 
 function sanitize(i: SearchInput) {
@@ -69,11 +86,15 @@ export async function createSearch(input: SearchInput) {
 
 export async function editSearch(id: string, input: SearchInput) {
   const userId = await uid();
+  const { role } = await editable(userId, id);
   const { notify_mode, ...data } = sanitize(input);
-  const email = notify_mode === "off" ? null : await getViewerEmail();
-  if (notify_mode !== "off" && !email) throw new Error("Seu e-mail principal não está verificado, então não dá para ligar o resumo por e-mail.");
-  await q.updateSearch(userId, id, data);
-  await q.setNotify(userId, id, notify_mode, email);
+  await q.updateSearch(id, data);
+  // o resumo por e-mail da busca é da dona; cada convidado ajusta o seu na barra da busca
+  if (role === "owner") {
+    const email = notify_mode === "off" ? null : await getViewerEmail();
+    if (notify_mode !== "off" && !email) throw new Error("Seu e-mail principal não está verificado, então não dá para ligar o resumo por e-mail.");
+    await q.setNotify(userId, id, notify_mode, email);
+  }
   refresh();
 }
 
@@ -83,13 +104,14 @@ export async function removeSearch(id: string) {
 }
 
 export async function toggleSearch(id: string, active: boolean) {
-  await q.setSearchActive(await uid(), id, active);
+  await editable(await uid(), id);
+  await q.setSearchActive(id, active);
   refresh();
 }
 
 export async function runNow(id: string) {
   const userId = await uid();
-  if (!(await q.getSearch(userId, id))) throw new Error("Busca não encontrada");
+  await editable(userId, id);
   const r = await runSearch(id);
   refresh();
   return r;
@@ -160,7 +182,11 @@ export async function sendTestEmail(searchId: string) {
 
 /** "Manter na lista": tira a vaga de "Filtradas" e impede que ela seja barrada de novo. */
 export async function keepFiltered(jobId: string) {
-  await q.keepJob(await uid(), jobId);
+  const userId = await uid();
+  const job = await q.getJob(userId, jobId);
+  if (!job) throw new Error("Vaga não encontrada");
+  await editable(userId, job.search_id);
+  await q.keepJob(jobId);
   refresh();
 }
 
@@ -184,29 +210,39 @@ export async function ensureDescription(jobId: string) {
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
-/** Membros e convites da busca (só a dona vê). */
+/** Membros e convites da busca, e o que quem pergunta pode fazer com eles. */
 export async function getShareInfo(searchId: string) {
-  return q.listMembers(await uid(), searchId);
+  const { role } = await manageable(await uid(), searchId);
+  return { members: await q.listMembers(searchId), myRole: role, canResend: mailConfigured() };
+}
+
+/** Nome de quem criou a busca, como o convidado vai ver ("de Fulano"). Um gestor herda o que recebeu no próprio convite. */
+const ownerNameFor = (a: Awaited<ReturnType<typeof manageable>>, viewerName: string) =>
+  a.role === "owner" ? viewerName : a.member?.inviter_name ?? null;
+
+async function sendInvite(member: q.Member, searchName: string, inviterName: string) {
+  const mail = renderInvite({ inviterName, searchName, role: member.role, acceptUrl: `${appUrl()}/convite/${member.token}`, appUrl: appUrl() });
+  await sendMail({ to: member.email, ...mail });
+  await q.markInviteSent(member.id);
 }
 
 /** Convida um e-mail. Sempre devolve o link; manda o e-mail do convite também, se o envio estiver configurado. */
-export async function inviteToSearch(searchId: string, email: string) {
+export async function inviteToSearch(searchId: string, email: string, role: MemberRole = "viewer") {
   const viewer = await getViewer();
   if (!viewer) throw new Error("Não autenticado");
   const e = email.trim().toLowerCase();
   if (!EMAIL_RE.test(e)) throw new Error("Esse e-mail não parece válido.");
   if (viewer.emails.includes(e)) throw new Error("Esse é o seu próprio e-mail.");
-  const search = await q.getSearch(viewer.userId, searchId);
-  if (!search) throw new Error("Só quem criou a busca pode convidar.");
+  const access = await manageable(viewer.userId, searchId);
+  if (!isMemberRole(role) || !assignableRoles(access.role).includes(role)) throw new Error("Você não pode dar esse nível de acesso.");
   await q.rateLimit("invite", viewer.userId, 20, 86400_000, "Limite diário de convites atingido. Tente amanhã.");
 
-  const { member, created } = await q.inviteMember(viewer.userId, searchId, e, viewer.name);
+  const { member, created } = await q.inviteMember(viewer.userId, searchId, e, ownerNameFor(access, viewer.name), role);
   let emailed = false;
   let emailError: string | undefined;
   if (created && mailConfigured()) {
     try {
-      const mail = renderInvite({ inviterName: viewer.name, searchName: search.name, acceptUrl: `${appUrl()}/convite/${member.token}`, appUrl: appUrl() });
-      await sendMail({ to: e, ...mail });
+      await sendInvite(member, access.search.name, viewer.name);
       emailed = true;
     } catch (err) {
       emailError = err instanceof Error ? err.message : String(err);
@@ -216,8 +252,43 @@ export async function inviteToSearch(searchId: string, email: string) {
   return { member, emailed, emailError };
 }
 
+/** Manda de novo o e-mail de um convite que ainda não foi aceito. */
+export async function resendInviteAction(memberId: string) {
+  const viewer = await getViewer();
+  if (!viewer) throw new Error("Não autenticado");
+  const member = await q.getMember(memberId);
+  if (!member) throw new Error("Convite não encontrado");
+  const access = await manageable(viewer.userId, member.search_id);
+  if (!canManageMember(access.role, member.role)) throw new Error("Você não pode reenviar este convite.");
+  if (member.status !== "pending") throw new Error("Essa pessoa já aceitou o convite.");
+  if (!mailConfigured()) throw new Error("O envio de e-mail não está configurado no servidor. Copie o link e mande você mesmo.");
+  if (member.last_sent_at && Date.now() - member.last_sent_at < 10 * 60_000) throw new Error("Convite enviado há pouco. Espere uns minutos antes de reenviar.");
+  await q.rateLimit("invite", viewer.userId, 20, 86400_000, "Limite diário de convites atingido. Tente amanhã.");
+  await sendInvite(member, access.search.name, viewer.name);
+  return { to: member.email };
+}
+
+/** Muda o nível de acesso de alguém (convite pendente ou já aceito). */
+export async function setMemberRoleAction(memberId: string, role: MemberRole) {
+  const userId = await uid();
+  if (!isMemberRole(role)) throw new Error("Nível inválido");
+  const member = await q.getMember(memberId);
+  if (!member) throw new Error("Pessoa não encontrada");
+  const access = await manageable(userId, member.search_id);
+  if (member.user_id === userId) throw new Error("Você não pode mudar o seu próprio acesso.");
+  if (!canManageMember(access.role, member.role) || !assignableRoles(access.role).includes(role)) throw new Error("Você não pode dar esse nível de acesso.");
+  await q.setMemberRole(memberId, role);
+  refresh();
+}
+
 export async function removeMemberAction(memberId: string) {
-  await q.removeMember(await uid(), memberId);
+  const userId = await uid();
+  const member = await q.getMember(memberId);
+  if (!member) return;
+  const access = await manageable(userId, member.search_id);
+  if (member.user_id === userId) throw new Error("Para sair, use “Sair da busca”.");
+  if (!canManageMember(access.role, member.role)) throw new Error("Você não pode remover esta pessoa.");
+  await q.removeMember(memberId);
   refresh();
 }
 

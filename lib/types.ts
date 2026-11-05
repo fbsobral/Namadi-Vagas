@@ -23,6 +23,7 @@ export type Search = {
   owner_name?: string | null;
   shared_count?: number;
   my_notify?: "off" | "run" | "daily" | null; // meu modo de e-mail, quando a busca é compartilhada comigo
+  my_role?: "owner" | "viewer" | "editor" | "admin" | null; // meu nível de acesso nesta busca
   // agregados
   total?: number;
   unseen?: number;

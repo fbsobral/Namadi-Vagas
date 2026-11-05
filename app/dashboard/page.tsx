@@ -18,6 +18,7 @@ import { RobotStatus, RunHistory } from "@/components/robot-status";
 import { NewSearchButton } from "@/components/new-search-button";
 import { KanbanBoard } from "@/components/kanban-board";
 import { OnboardingProvider } from "@/components/onboarding";
+import { canEdit } from "@/lib/roles";
 import { HelpButton, ModuleTip } from "@/components/guide";
 
 export const dynamic = "force-dynamic";
@@ -65,7 +66,10 @@ export default async function Dashboard({ searchParams }: PageProps<"/dashboard"
   const anyRunning = searches.some((s) => s.last_status === "running" || (s.active === 1 && s.last_run_at == null && isFresh(s.created_at, 5 * 60_000)));
   const title = current ? current.name : view === "board" ? "Kanban" : filter === "fav" ? "Favoritas" : "Todas as vagas";
   const sources = current ? (JSON.parse(current.sources) as string[]) : [];
+  const myRole = current ? (current.is_owner === false ? current.my_role ?? "viewer" : "owner") : null;
   const guide = view === "board" ? "board" : current?.is_owner === false ? "shared" : "list";
+  // quem pode "Manter na lista" uma vaga filtrada: a dona ou quem edita aquela busca
+  const editableIds = new Set(searches.filter((s) => s.is_owner !== false || canEdit(s.my_role)).map((s) => s.id));
 
   return (
     <OnboardingProvider seen={seenGuides} hasSearches={searches.length > 0}>
@@ -108,7 +112,7 @@ export default async function Dashboard({ searchParams }: PageProps<"/dashboard"
                   Última rodada {timeAgo(current.last_run_at)}{current.active && current.next_run_at ? ` · próxima ${timeAgo(current.next_run_at)}` : ""}
                 </p>
                 {current.last_status === "error" && <p className="mt-2 inline-flex items-center gap-2 rounded-lg bg-accent-soft px-3 py-1.5 text-sm text-accent"><AlertTriangle className="size-4" /> {current.last_error}</p>}
-                <div className="mt-5">{current.is_owner === false ? <SharedToolbar search={current} unseen={jobs.filter((j) => !j.seen).length} ownerName={current.owner_name ?? null} /> : <SearchToolbar search={current} unseen={jobs.filter((j) => !j.seen).length} />}</div>
+                <div className="mt-5">{canEdit(myRole) ? <SearchToolbar search={current} role={myRole ?? "owner"} ownerName={current.owner_name ?? null} unseen={jobs.filter((j) => !j.seen).length} /> : <SharedToolbar search={current} unseen={jobs.filter((j) => !j.seen).length} ownerName={current.owner_name ?? null} />}</div>
                 <RunHistory runs={runs} />
               </>
             ) : (
@@ -143,7 +147,7 @@ export default async function Dashboard({ searchParams }: PageProps<"/dashboard"
             </div>
           ) : (
             <div className="mt-5 grid gap-3 sm:mt-6 sm:gap-4">
-              {jobs.map((j, i) => <JobCard key={j.id} job={j} index={i} showSearch={!current} href={base({ job: j.id })} />)}
+              {jobs.map((j, i) => <JobCard key={j.id} job={j} index={i} showSearch={!current} canKeep={editableIds.has(j.search_id)} href={base({ job: j.id })} />)}
               {jobs.length === 0 && <EmptyState hasSearches={searches.length > 0} current={!!current} filter={filter} running={current?.last_status === "running"} />}
             </div>
           )}

@@ -62,3 +62,11 @@ No formulário da busca, **Preencher com meu currículo** (PDF, DOCX ou TXT, at�
 
 ## Onboarding e guias
 Na primeira visita ao painel abre um **tour de boas-vindas** (7 passos; termina com "Criar minha primeira busca" para quem ainda não tem nenhuma). Cada módulo — **editor de busca, lista de vagas, detalhes da vaga, Kanban, compartilhar e busca compartilhada comigo** — mostra um aviso "Primeira vez aqui?" até a pessoa abrir ou dispensar o guia dele. O botão **?** de cada tela reabre o guia correspondente e **Ajuda e guias** (menu lateral ou topo no celular) lista todos, com a opção de mostrar as dicas de novo. O que cada pessoa já viu fica no banco (`kv`, chave `onb:<userId>`), então vale em qualquer aparelho. O conteúdo dos guias está em `lib/onboarding.ts`.
+
+### Níveis de acesso
+Ao convidar, quem gerencia escolhe o nível (dá para mudar depois, na lista de pessoas):
+- **Pode ver**: vê as vagas e recebe os e-mails; favoritas e Kanban são próprios.
+- **Pode editar**: também edita a busca, roda agora, pausa/retoma e mantém vagas filtradas. O resumo por e-mail da busca continua sendo de quem a criou.
+- **Pode gerenciar**: também convida, reenvia convites e muda o acesso de leitores e editores.
+
+Só quem criou a busca pode excluí-la e mudar o acesso de quem gerencia. As permissões são conferidas no servidor (`roleFor` + `lib/roles.ts`). Convites pendentes podem ser **reenviados** por e-mail (intervalo mínimo de 10 min, conta no limite diário de convites) ou ter o link copiado.

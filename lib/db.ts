@@ -2,6 +2,7 @@ import "server-only";
 import { randomBytes, randomUUID } from "node:crypto";
 import { Pool, types } from "pg";
 import { safeUrl } from "./safe-url";
+import { isMemberRole, type MemberRole, type Role } from "./roles";
 import type { Contact, Job, Search } from "./types";
 
 // BIGINT (timestamps em ms) e COUNT() voltam como número em vez de string.
@@ -84,6 +85,9 @@ CREATE INDEX IF NOT EXISTS idx_members_user ON search_members(user_id);
 ALTER TABLE search_members ADD COLUMN IF NOT EXISTS notify_mode TEXT NOT NULL DEFAULT 'run';
 ALTER TABLE search_members ADD COLUMN IF NOT EXISTS notify_since BIGINT;
 ALTER TABLE search_members ADD COLUMN IF NOT EXISTS notify_last_at BIGINT;
+-- nível de acesso do convidado: viewer (vê), editor (edita a busca), admin (também gerencia pessoas)
+ALTER TABLE search_members ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'viewer';
+ALTER TABLE search_members ADD COLUMN IF NOT EXISTS last_sent_at BIGINT;
 UPDATE search_members SET notify_since = (extract(epoch from now()) * 1000)::bigint WHERE notify_since IS NULL AND status = 'accepted';
 
 -- vagas já avisadas a cada convidado (o dono usa jobs.notified_at)
@@ -214,12 +218,13 @@ export const listSearches = (userId: string) =>
     `SELECT s.*, (s.user_id = ?) AS is_owner,
        (SELECT m.inviter_name FROM search_members m WHERE m.search_id = s.id AND m.user_id = ? AND m.status = 'accepted') AS owner_name,
        (SELECT m.notify_mode FROM search_members m WHERE m.search_id = s.id AND m.user_id = ? AND m.status = 'accepted') AS my_notify,
+       CASE WHEN s.user_id = ? THEN 'owner' ELSE (SELECT m.role FROM search_members m WHERE m.search_id = s.id AND m.user_id = ? AND m.status = 'accepted') END AS my_role,
        (SELECT COUNT(*) FROM search_members m WHERE m.search_id = s.id AND m.status = 'accepted') AS shared_count,
        (SELECT COUNT(*) FROM jobs j WHERE j.search_id = s.id AND j.filtered = 0) AS total,
        (SELECT COUNT(*) FROM jobs j LEFT JOIN job_user u ON u.job_id = j.id AND u.user_id = ? WHERE j.search_id = s.id AND j.filtered = 0 AND COALESCE(u.seen, 0) = 0) AS unseen,
        (SELECT COUNT(*) FROM jobs j JOIN job_user u ON u.job_id = j.id AND u.user_id = ? WHERE j.search_id = s.id AND j.filtered = 0 AND u.favorite = 1) AS favs
      FROM searches s WHERE ${ACCESS} ORDER BY (s.user_id = ?) DESC, s.created_at ASC`,
-    userId, userId, userId, userId, userId, userId, userId, userId,
+    userId, userId, userId, userId, userId, userId, userId, userId, userId, userId,
   );
 
 export const getSearch = (userId: string, id: string) =>
@@ -237,20 +242,31 @@ export async function insertSearch(s: Omit<Search, "last_run_at" | "last_status"
   );
 }
 
-export async function updateSearch(userId: string, id: string, s: Pick<Search, "name" | "query" | "query_spec" | "location" | "sources" | "recency" | "freq_minutes">) {
-  const cur = await getSearch(userId, id);
+/** Quem chama já conferiu a permissão (roleFor + canEdit). */
+export async function updateSearch(id: string, s: Pick<Search, "name" | "query" | "query_spec" | "location" | "sources" | "recency" | "freq_minutes">) {
+  const cur = await getSearchById(id);
   if (!cur) return;
   const next = cur.active ? (cur.last_run_at ?? Date.now()) + s.freq_minutes * 60000 : cur.next_run_at;
   await run(
-    "UPDATE searches SET name=?, query=?, query_spec=?, location=?, sources=?, recency=?, freq_minutes=?, next_run_at=? WHERE id=? AND user_id=?",
-    s.name, s.query, s.query_spec, s.location, s.sources, s.recency, s.freq_minutes, next, id, userId,
+    "UPDATE searches SET name=?, query=?, query_spec=?, location=?, sources=?, recency=?, freq_minutes=?, next_run_at=? WHERE id=?",
+    s.name, s.query, s.query_spec, s.location, s.sources, s.recency, s.freq_minutes, next, id,
   );
 }
 
-export const setSearchActive = (userId: string, id: string, active: boolean) =>
+/** Quem chama já conferiu a permissão (roleFor + canEdit). */
+export const setSearchActive = (id: string, active: boolean) =>
   active
-    ? run("UPDATE searches SET active=1, next_run_at=? WHERE id=? AND user_id=?", Date.now(), id, userId)
-    : run("UPDATE searches SET active=0 WHERE id=? AND user_id=?", id, userId);
+    ? run("UPDATE searches SET active=1, next_run_at=? WHERE id=?", Date.now(), id)
+    : run("UPDATE searches SET active=0 WHERE id=?", id);
+
+/** Busca + o nível de acesso de quem pede (dona, ou convidado que aceitou). null = sem acesso. */
+export async function roleFor(userId: string, searchId: string): Promise<{ search: Search; role: Role; member: Member | null } | null> {
+  const search = await getSearchById(searchId);
+  if (!search) return null;
+  if (search.user_id === userId) return { search, role: "owner", member: null };
+  const member = await get<Member>("SELECT * FROM search_members WHERE search_id = ? AND user_id = ? AND status = 'accepted'", searchId, userId);
+  return member ? { search, role: isMemberRole(member.role) ? member.role : "viewer", member } : null;
+}
 
 export const deleteSearch = (userId: string, id: string) =>
   run("DELETE FROM searches WHERE id=? AND user_id=?", id, userId);
@@ -466,8 +482,9 @@ export const jobsNeedingDescription = (searchId: string, limit: number) =>
 export const markFiltered = (id: string, reason: string) => run("UPDATE jobs SET filtered=1, filtered_reason=? WHERE id=? AND filter_keep=0", reason, id);
 
 /** "Manter na lista": só a dona da busca. Desfaz o filtro e impede que ele volte a barrar essa vaga. */
-export const keepJob = (userId: string, id: string) =>
-  run("UPDATE jobs SET filtered=0, filtered_reason=NULL, filter_keep=1 WHERE id=? AND search_id IN (SELECT id FROM searches WHERE user_id=?)", id, userId);
+/** Quem chama já conferiu a permissão (roleFor + canEdit). */
+export const keepJob = (id: string) =>
+  run("UPDATE jobs SET filtered=0, filtered_reason=NULL, filter_keep=1 WHERE id=?", id);
 
 export async function filteredCount(userId: string, searchId: string | null) {
   const r = await get<{ n: number }>(
@@ -573,37 +590,49 @@ export type Member = {
   id: string; search_id: string; email: string; user_id: string | null; status: "pending" | "accepted";
   inviter_name: string | null; member_name: string | null; token: string; created_at: number; accepted_at: number | null;
   notify_mode: "off" | "run" | "daily"; notify_since: number | null; notify_last_at: number | null;
+  role: MemberRole; last_sent_at: number | null;
 };
 export type PendingInvite = Member & { search_name: string; search_color: string };
 
-export const listMembers = (ownerId: string, searchId: string) =>
-  all<Member>(
-    `SELECT m.* FROM search_members m JOIN searches s ON s.id = m.search_id WHERE m.search_id = ? AND s.user_id = ? ORDER BY m.created_at ASC`,
-    searchId, ownerId,
-  );
+/** Quem chama já conferiu a permissão (roleFor + canManage). */
+export const listMembers = (searchId: string) =>
+  all<Member>("SELECT * FROM search_members WHERE search_id = ? ORDER BY created_at ASC", searchId);
 
-/** Convida um e-mail para ver a busca. Só a dona convida. Reconvidar um pendente devolve o mesmo convite. */
-export async function inviteMember(ownerId: string, searchId: string, email: string, inviterName: string | null) {
-  const search = await getSearch(ownerId, searchId);
-  if (!search) throw new Error("Busca não encontrada");
+export const getMember = (memberId: string) => get<Member>("SELECT * FROM search_members WHERE id = ?", memberId);
+
+export const setMemberRole = (memberId: string, role: MemberRole) =>
+  run("UPDATE search_members SET role = ? WHERE id = ?", role, memberId);
+
+export const markInviteSent = (memberId: string) =>
+  run("UPDATE search_members SET last_sent_at = ? WHERE id = ?", Date.now(), memberId);
+
+/**
+ * Convida um e-mail para a busca (quem chama já conferiu canManage). `ownerName` é o nome de quem criou a busca:
+ * é ele que o convidado vê como "de Fulano", mesmo quando quem convidou foi um gestor.
+ * Reconvidar um pendente devolve o mesmo convite.
+ */
+export async function inviteMember(invitedBy: string, searchId: string, email: string, ownerName: string | null, role: MemberRole) {
   const e = email.trim().toLowerCase();
   const cur = await get<Member>("SELECT * FROM search_members WHERE search_id = ? AND email = ?", searchId, e);
   if (cur?.status === "accepted") throw new Error("Essa pessoa já tem acesso a esta busca.");
-  if (cur) return { member: cur, created: false };
+  if (cur) {
+    if (cur.role !== role) await setMemberRole(cur.id, role);
+    return { member: { ...cur, role }, created: false };
+  }
   const member: Member = {
     id: randomUUID(), search_id: searchId, email: e, user_id: null, status: "pending",
-    inviter_name: inviterName, member_name: null, token: randomBytes(18).toString("base64url"), created_at: Date.now(), accepted_at: null,
-    notify_mode: "run", notify_since: null, notify_last_at: null,
+    inviter_name: ownerName, member_name: null, token: randomBytes(18).toString("base64url"), created_at: Date.now(), accepted_at: null,
+    notify_mode: "run", notify_since: null, notify_last_at: null, role, last_sent_at: null,
   };
   await run(
-    "INSERT INTO search_members (id, search_id, email, status, invited_by, inviter_name, token, created_at) VALUES (?, ?, ?, 'pending', ?, ?, ?, ?)",
-    member.id, searchId, e, ownerId, inviterName, member.token, member.created_at,
+    "INSERT INTO search_members (id, search_id, email, status, invited_by, inviter_name, token, created_at, role) VALUES (?, ?, ?, 'pending', ?, ?, ?, ?, ?)",
+    member.id, searchId, e, invitedBy, ownerName, member.token, member.created_at, role,
   );
   return { member, created: true };
 }
 
-export const removeMember = (ownerId: string, memberId: string) =>
-  run("DELETE FROM search_members WHERE id = ? AND search_id IN (SELECT id FROM searches WHERE user_id = ?)", memberId, ownerId);
+/** Quem chama já conferiu a permissão (canManageMember). */
+export const removeMember = (memberId: string) => run("DELETE FROM search_members WHERE id = ?", memberId);
 
 export const leaveSearch = (userId: string, searchId: string) =>
   run("DELETE FROM search_members WHERE search_id = ? AND user_id = ?", searchId, userId);

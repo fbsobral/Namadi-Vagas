@@ -8,7 +8,7 @@ import { timeAgo } from "@/lib/format";
 import { sourceLabel } from "@/lib/sources";
 import type { Job } from "@/lib/types";
 
-export function JobCard({ job, href, showSearch, index }: { job: Job; href: string; showSearch: boolean; index: number }) {
+export function JobCard({ job, href, showSearch, index, canKeep }: { job: Job; href: string; showSearch: boolean; index: number; canKeep: boolean }) {
   return (
     <article
       className="group anim-rise relative rounded-3xl border border-line bg-surface shadow-card transition duration-200 hover:-translate-y-0.5 hover:border-ink-3/40 hover:shadow-pop"
@@ -43,7 +43,7 @@ export function JobCard({ job, href, showSearch, index }: { job: Job; href: stri
           </div>
         </div>
       </Link>
-      {job.filtered === 1 && job.is_owner !== false && <div className="border-t border-line px-4 py-3 sm:px-5"><KeepButton jobId={job.id} /></div>}
+      {job.filtered === 1 && canKeep && <div className="border-t border-line px-4 py-3 sm:px-5"><KeepButton jobId={job.id} /></div>}
       <div className="absolute top-2 right-2 flex flex-col items-center gap-0.5 sm:top-4 sm:right-4 sm:gap-1">
         <FavoriteButton jobId={job.id} favorite={job.favorite === 1} />
         <a href={hrefOf(job.url)} target="_blank" rel="noopener noreferrer" aria-label="Abrir vaga em nova aba" className="grid size-10 place-items-center rounded-full text-ink-3 transition hover:bg-surface-2 hover:text-ink focus-visible:opacity-100 lg:opacity-0 lg:group-hover:opacity-100">

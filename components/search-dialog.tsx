@@ -130,7 +130,9 @@ function DialogBody({ onClose, initial }: { onClose: () => void; initial?: Searc
           </div>
         </div>
 
-        <EmailSettings mode={f.notify_mode} onChange={(m) => set("notify_mode", m)} searchId={initial?.id} />
+        {initial?.is_owner === false
+          ? <p className="mt-6 rounded-xl bg-surface-2 px-4 py-3 text-[13px] text-ink-2">O resumo por e-mail desta busca é de quem a criou. O seu você escolhe no seletor <strong className="font-medium text-ink">E-mail</strong> da barra da busca.</p>
+          : <EmailSettings mode={f.notify_mode} onChange={(m) => set("notify_mode", m)} searchId={initial?.id} />}
 
         <div className="mt-6 space-y-3 rounded-2xl bg-surface-2 p-4">
           <p className="text-xs font-medium tracking-wider text-ink-3 uppercase">O que o robô vai buscar</p>

@@ -414,7 +414,7 @@ const V: Record<VisualKey, () => React.ReactNode> = {
             <span className={`grid size-5 place-items-center rounded-full ${k === 1 ? "bg-accent-soft text-accent" : "text-ink-3"}`}><X className="size-3" /></span>
           </div>
         ))}
-        <p className="flex items-center gap-1 pt-1 text-[9.5px] text-ink-3"><Pencil className="size-3" /> Só você edita, pausa, roda e exclui.</p>
+        <p className="flex items-center gap-1 pt-1 text-[9.5px] text-ink-3"><Pencil className="size-3" /> Cada pessoa com o nível que você escolher.</p>
       </Screen>
     </Frame>
   ),

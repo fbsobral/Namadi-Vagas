@@ -124,7 +124,7 @@ export default async function Home() {
               </div>
             </Feature>
 
-            <Feature className="md:col-span-3" icon={Share2} title="Busque junto" text="Compartilhe uma busca por e-mail com quem também está procurando. Cada pessoa tem suas favoritas, seu Kanban e escolhe como receber os e-mails. Só você edita a busca.">
+            <Feature className="md:col-span-3" icon={Share2} title="Busque junto" text="Compartilhe uma busca por e-mail com quem também está procurando. Cada pessoa tem suas favoritas, seu Kanban e escolhe como receber os e-mails. Você decide quem só vê, quem pode editar e quem pode convidar.">
               <div className="mt-5 flex items-center">
                 {["MA", "RC", "CD"].map((n, i) => (
                   <span key={n} className="-ml-2 grid size-9 place-items-center rounded-full border-2 border-surface text-xs font-semibold text-white first:ml-0" style={{ background: ["#2F6BFF", "#14A37F", "#A855F7"][i] }}>{n}</span>
@@ -221,7 +221,7 @@ const FAQ: [string, string][] = [
   ["Vou receber vaga repetida?", "Não. O robô lembra o que já encontrou e só grava vagas inéditas, que aparecem com o selo NOVA até você abrir."],
   ["Como funciona a parte dos contatos?", "Ao favoritar uma vaga, o robô procura perfis públicos do LinkedIn ligados à empresa e separa em recrutamento, liderança e pessoas do time, cada um com uma mensagem sugerida para copiar."],
   ["Meu currículo fica guardado?", "Não. Quando você usa “Preencher com meu currículo”, o arquivo é lido na hora para sugerir a busca e depois descartado. Nada é criado sem a sua confirmação."],
-  ["Quem vê uma busca compartilhada?", "Só quem você convidar por e-mail e entrar com esse mesmo e-mail. Cada pessoa tem favoritas, Kanban e e-mails próprios; só quem criou a busca pode editá-la."],
+  ["Quem vê uma busca compartilhada?", "Só quem você convidar por e-mail e entrar com esse mesmo e-mail. Cada pessoa tem favoritas, Kanban e e-mails próprios. Ao convidar, você escolhe o nível: pode ver, pode editar ou pode gerenciar (também convida pessoas). Só quem criou pode excluir a busca."],
   ["Dá para usar no celular?", "Sim. O painel foi pensado para telas pequenas e você pode adicioná-lo à tela de início para abrir como um app."],
 ];
 

@@ -230,8 +230,8 @@ export const GUIDES: Record<GuideId, Guide> = {
         icon: "share",
         visual: "invite",
         title: "Convide por e-mail",
-        body: "Digite o e-mail da pessoa. Ela vê o convite ao entrar no painel, ou pelo link que você pode copiar e mandar por onde quiser.",
-        bullets: ["O convite só vale para quem entrar com aquele mesmo e-mail"],
+        body: "Digite o e-mail da pessoa e escolha o nível de acesso. Ela vê o convite ao entrar no painel, ou pelo link que você pode copiar e mandar por onde quiser.",
+        bullets: ["O convite só vale para quem entrar com aquele mesmo e-mail", "Não chegou? Use “Reenviar” ou copie o link"],
       },
       {
         icon: "users",
@@ -242,8 +242,9 @@ export const GUIDES: Record<GuideId, Guide> = {
       {
         icon: "check",
         visual: "owner",
-        title: "Você continua no controle",
-        body: "Só você edita, pausa, roda, exclui e convida. Para tirar o acesso de alguém, use o X ao lado do nome.",
+        title: "Níveis de acesso",
+        body: "Mude o nível de cada pessoa quando quiser. Para tirar o acesso, use o X ao lado do nome. Excluir a busca é sempre só com você.",
+        bullets: ["Pode ver: vagas e e-mails", "Pode editar: também edita, roda e pausa a busca", "Pode gerenciar: também convida e muda acessos"],
       },
     ],
   },
@@ -251,14 +252,15 @@ export const GUIDES: Record<GuideId, Guide> = {
   shared: {
     id: "shared",
     label: "Busca compartilhada comigo",
-    summary: "O que dá para fazer numa busca de outra pessoa",
+    summary: "Seu nível de acesso e o que dá para fazer",
     icon: "users",
     steps: [
       {
         icon: "users",
         visual: "sharedBanner",
         title: "Alguém dividiu um radar com você",
-        body: "Você vê as vagas que o robô encontrar nesta busca a partir de agora. Quem cuida dela (editar, pausar, rodar) é quem compartilhou.",
+        body: "Você vê as vagas que o robô encontrar nesta busca. O que mais dá para fazer depende do seu nível, que aparece na barra da busca: pode ver, pode editar ou pode gerenciar.",
+        bullets: ["Pode editar: muda palavras-chave, roda e pausa", "Pode gerenciar: também convida pessoas", "Excluir a busca é só com quem criou"],
       },
       {
         icon: "star",
