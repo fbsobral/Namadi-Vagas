@@ -28,10 +28,10 @@ function Copier({ text, label = "Copiar" }: { text: string; label?: string }) {
 const Count = ({ n, max }: { n: number; max: number }) => <span className={`font-mono text-[11px] ${n > max ? "text-accent" : "text-ink-3"}`}>{n}/{max}</span>;
 
 /** Objetivo: cargo-alvo livre, com sugestões dos cargos dos currículos. */
-function TargetInput({ value, onChange, targets }: { value: string; onChange: (v: string) => void; targets: string[] }) {
+function TargetInput({ value, onChange, targets, step }: { value: string; onChange: (v: string) => void; targets: string[]; step?: boolean }) {
   return (
     <label className="block">
-      <span className="mb-1.5 block text-sm font-medium">Para qual cargo você quer ser encontrado? <span className="font-normal text-ink-3">(opcional)</span></span>
+      <span className="mb-1.5 block text-sm font-medium">{step && <span className="mr-1.5 inline-grid size-5 place-items-center rounded-full bg-[#0a66c2] text-[11px] font-bold text-white">1</span>}Para qual cargo você quer ser encontrado?</span>
       <input list="li-targets" value={value} onChange={(e) => onChange(e.target.value)} maxLength={120} placeholder="ex.: Head de Growth"
         className="w-full rounded-xl border border-line bg-bg px-4 py-3 outline-none transition focus:border-accent focus:ring-4 focus:ring-accent/15" />
       <datalist id="li-targets">{targets.map((t) => <option key={t} value={t} />)}</datalist>
@@ -52,7 +52,10 @@ function Uploader({ targets, configured, initialTarget = "", compact }: { target
   const [showPaste, setShowPaste] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  // a análise é sempre para um cargo: sem cargo-alvo, o envio não libera
+  const needTarget = target.trim().length < 2;
   const send = async (fields: { file?: File; text?: string }) => {
+    if (needTarget) return setErr("Diga primeiro para qual cargo você quer ser encontrado.");
     setErr(null); setBusy(fields.file?.name ?? "o texto");
     try {
       const body = new FormData();
@@ -68,13 +71,14 @@ function Uploader({ targets, configured, initialTarget = "", compact }: { target
   };
   return (
     <div className="space-y-4">
-      {!compact && <TargetInput value={target} onChange={setTarget} targets={targets} />}
-      <button type="button" disabled={!!busy || !configured} onClick={() => input.current?.click()}
+      {!compact && <TargetInput value={target} onChange={setTarget} targets={targets} step />}
+      {!compact && <p className="-mb-2 text-sm font-medium"><span className="mr-1.5 inline-grid size-5 place-items-center rounded-full bg-[#0a66c2] text-[11px] font-bold text-white">2</span>Envie o perfil</p>}
+      <button type="button" disabled={!!busy || !configured || needTarget} onClick={() => input.current?.click()}
         className={`flex w-full items-center gap-4 rounded-3xl border-2 border-dashed border-line bg-surface text-left transition hover:border-accent/60 disabled:cursor-not-allowed ${compact ? "p-4" : "p-5 sm:p-7"}`}>
         <span className="grid size-12 shrink-0 place-items-center rounded-2xl bg-[#0a66c2] text-white">{busy ? <Loader2 className="spin size-6" /> : <Upload className="size-6" />}</span>
         <span className="min-w-0">
           <span className="block font-semibold">{busy ? `Analisando ${busy}…` : compact ? "Enviar o perfil de novo" : "Envie o PDF do seu perfil"}</span>
-          <span className="block text-sm text-ink-3">{busy ? "Leva uns 30 segundos." : "No LinkedIn, abra seu perfil › Mais › Salvar como PDF. Depois toque aqui."}</span>
+          <span className="block text-sm text-ink-3">{busy ? "Leva uns 30 segundos." : needTarget ? "Primeiro diga o cargo, acima." : "No LinkedIn, abra seu perfil › Mais › Salvar como PDF. Depois toque aqui."}</span>
         </span>
       </button>
       <input ref={input} type="file" hidden accept=".pdf,.docx,.txt,application/pdf" onChange={(e) => { const f = e.target.files?.[0]; if (f) send({ file: f }); e.target.value = ""; }} />
@@ -84,7 +88,7 @@ function Uploader({ targets, configured, initialTarget = "", compact }: { target
           <div className="mt-2 space-y-2">
             <textarea value={paste} onChange={(e) => setPaste(e.target.value)} rows={8} placeholder="Cole aqui o título, o Sobre, as experiências e as competências do seu perfil."
               className="w-full rounded-xl border border-line bg-bg p-3 text-sm outline-none focus:border-accent focus:ring-4 focus:ring-accent/15" />
-            <button type="button" disabled={!!busy || paste.trim().length < 80 || !configured} onClick={() => send({ text: paste })}
+            <button type="button" disabled={!!busy || paste.trim().length < 80 || !configured || needTarget} onClick={() => send({ text: paste })}
               className="inline-flex min-h-10 items-center gap-2 rounded-full bg-ink px-4 text-sm font-medium text-bg disabled:opacity-50"><Sparkles className="size-4" /> Analisar o texto</button>
           </div>
         )}
@@ -161,7 +165,7 @@ function Loaded({ p, targets, configured }: { p: LinkedinProfile; targets: strin
           <div className="rounded-3xl border border-line bg-surface p-5 shadow-card">
             <TargetInput value={target} onChange={setTarget} targets={targets} />
             <div className="mt-4 flex flex-wrap gap-2">
-              <button disabled={pending || !configured} onClick={reanalyze} className="inline-flex min-h-10 items-center gap-2 rounded-full bg-ink px-4 text-sm font-medium text-bg disabled:opacity-50">
+              <button disabled={pending || !configured || target.trim().length < 2} onClick={reanalyze} className="inline-flex min-h-10 items-center gap-2 rounded-full bg-ink px-4 text-sm font-medium text-bg disabled:opacity-50">
                 <RefreshCw className={`size-4 ${pending ? "spin" : ""}`} /> {pending ? "Analisando…" : target.trim() !== p.target_role ? "Analisar para este cargo" : "Reanalisar"}
               </button>
               {confirm ? (

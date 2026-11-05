@@ -18,6 +18,9 @@ export async function POST(req: Request) {
   const pasted = String(form?.get("text") ?? "").trim();
   const target = String(form?.get("target") ?? "").replace(/\s+/g, " ").trim().slice(0, 120);
 
+  // a análise é sempre para um cargo: sem cargo-alvo, nada é analisado
+  if (target.length < 2) return Response.json({ error: "Diga primeiro para qual cargo você quer ser encontrado." }, { status: 400 });
+
   try {
     let content;
     let fileName = "";

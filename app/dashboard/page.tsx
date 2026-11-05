@@ -33,7 +33,7 @@ export default async function Dashboard({ searchParams }: PageProps<"/dashboard"
   const one = (k: string) => (typeof sp[k] === "string" ? (sp[k] as string) : null);
 
   const [searches, counts, viewer, seenGuides, flags, cvRows, chosenCv] = await Promise.all([listSearches(userId), jobCounts(userId), getViewer(), getSeenGuides(userId), aiFlags(), listCvs(userId), searchCvMap(userId)]);
-  const cvs = cvRows.map((c) => ({ id: c.id, name: c.name, target_role: c.target_role, is_primary: c.is_primary, updated_at: c.updated_at }));
+  const cvs = cvRows.map((c) => ({ id: c.id, name: c.target_role || c.name, target_role: c.target_role, is_primary: c.is_primary, updated_at: c.updated_at }));
   const invites = await pendingInvitesFor(viewer?.emails ?? []);
   const current = searches.find((s) => s.id === one("s")) ?? null;
   const view = one("v") === "board" ? "board" : "list";

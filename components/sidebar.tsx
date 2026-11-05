@@ -6,6 +6,7 @@ import { Menu, Plus, Star, Layers, X, Columns3, CircleHelp, FileText, Settings2 
 import { Logo } from "./logo";
 import { SearchDialog } from "./search-dialog";
 import { useGuides } from "./guide";
+import { LinkedinIcon } from "./linkedin-icon";
 import { guideState } from "@/lib/onboarding";
 import { freqLabel } from "@/lib/sources";
 import type { Search } from "@/lib/types";
@@ -46,7 +47,7 @@ export function Sidebar({ searches, counts, currentId, filter, view = "list", ro
         <NavItem href="/dashboard?v=board" active={boardActive} icon={<Columns3 className="size-4" />} label="Kanban" count={counts.favs} />
         <NavItem href="/dashboard?f=fav" active={favActive} icon={<Star className="size-4" />} label="Favoritas" count={counts.favs} />
         <NavItem href="/dashboard/curriculo" active={cvActive} icon={<FileText className="size-4" />} label="Currículo" />
-        <NavItem href="/dashboard/linkedin" active={liActive} icon={<span className="grid size-4 place-items-center rounded-[3px] bg-[#0a66c2] text-[9px] leading-none font-extrabold text-white">in</span>} label="Perfil do LinkedIn" />
+        <NavItem href="/dashboard/linkedin" active={liActive} icon={<LinkedinIcon />} label="Perfil do LinkedIn" />
       </nav>
 
       <div className="mt-7 flex items-center justify-between px-5">

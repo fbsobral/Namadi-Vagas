@@ -402,6 +402,7 @@ export async function reanalyzeResumeAction(cvId: string) {
   const userId = await uid();
   return friendly(async () => {
     const r = await myCv(userId, cvId);
+    if (!r.target_role.trim()) throw new Error("Defina o cargo-alvo deste currículo antes de analisar.");
     await resumeQuota(userId);
     const { analyzeText } = await import("@/lib/resume");
     const { analysis } = await analyzeText(r.text, r.target_role);
@@ -411,12 +412,24 @@ export async function reanalyzeResumeAction(cvId: string) {
   });
 }
 
-/** Renomeia e/ou muda o cargo-alvo (a nota só muda ao reanalisar). */
-export async function updateCvMetaAction(cvId: string, name: string, target: string) {
+/**
+ * Define (ou troca) o cargo-alvo de um currículo e já refaz a análise para ele: a nota, as palavras-chave e as
+ * sugestões só valem para um cargo. O nome do currículo é o próprio cargo-alvo.
+ */
+export async function setCvTargetAction(cvId: string, target: string) {
   const userId = await uid();
-  const r = await myCv(userId, cvId);
-  await q.updateCvMeta(userId, r.id, cleanName(name, 60) || r.name, cleanName(target, 120));
-  refresh();
+  return friendly(async () => {
+    const r = await myCv(userId, cvId);
+    const t = cleanName(target, 120);
+    if (t.length < 2) throw new Error("Diga o cargo-alvo deste currículo.");
+    await resumeQuota(userId);
+    const { analyzeText } = await import("@/lib/resume");
+    const { analysis } = await analyzeText(r.text, t);
+    await q.updateCvMeta(userId, r.id, t.slice(0, 60), t);
+    await q.saveCvAnalysis(r.id, r.file_name, r.text, analysis);
+    refresh();
+    return { score: analysis.score, before: r.analysis.score };
+  });
 }
 
 export async function setPrimaryCvAction(cvId: string) {
@@ -432,7 +445,7 @@ export async function deleteCvAction(cvId: string) {
 }
 
 /** "Adaptar para outro cargo": cria uma versão nova a partir de um currículo existente, já analisada para o cargo. */
-export async function adaptCvAction(fromCvId: string, target: string, name?: string) {
+export async function adaptCvAction(fromCvId: string, target: string) {
   const userId = await uid();
   return friendly(async () => {
     const from = await myCv(userId, fromCvId);
@@ -442,7 +455,7 @@ export async function adaptCvAction(fromCvId: string, target: string, name?: str
     await resumeQuota(userId);
     const { adaptResume } = await import("@/lib/resume");
     const { text, analysis } = await adaptResume(from.text, t);
-    const id = await q.createCv(userId, { name: cleanName(name, 60) || t, target_role: t, file_name: from.file_name, text, analysis });
+    const id = await q.createCv(userId, { name: t.slice(0, 60), target_role: t, file_name: from.file_name, text, analysis });
     refresh();
     return { id };
   });
@@ -570,6 +583,7 @@ export async function reanalyzeLinkedinAction(target?: string) {
   return friendly(async () => {
     const p = await myLinkedin(userId);
     const t = target === undefined ? p.target_role : cleanName(target, 120);
+    if (t.length < 2) throw new Error("Diga para qual cargo você quer ser encontrado.");
     const { getAiConfig } = await import("@/lib/ai-config");
     const n = (await getAiConfig()).features.linkedin.daily;
     await q.rateLimit("linkedin", userId, n, 86400_000, `Limite de ${n} análises de perfil por dia atingido. Tente amanhã.`);

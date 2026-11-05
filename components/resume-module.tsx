@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import {
   Check, ChevronDown, MessageSquarePlus, Plus, Send, Download, FileText, Loader2, Pencil, Printer, RefreshCw, ShieldCheck, Sparkles, Star, Trash2, Upload, X,
 } from "lucide-react";
-import { acceptSuggestionAction, adaptCvAction, deleteCvAction, dismissSuggestionAction, reanalyzeResumeAction, refineSuggestionAction, saveResumeTextAction, setPrimaryCvAction, updateCvMetaAction } from "@/app/actions";
+import { acceptSuggestionAction, adaptCvAction, deleteCvAction, dismissSuggestionAction, reanalyzeResumeAction, refineSuggestionAction, saveResumeTextAction, setCvTargetAction, setPrimaryCvAction } from "@/app/actions";
 import Link from "next/link";
 import { useAiFlags } from "./ai-flags";
 import { SUBSCORES, type Resume, type ResumeSuggestion } from "@/lib/resume-shared";
@@ -65,18 +65,22 @@ function Dropzone({ configured, compact, cvId, askTarget }: { configured: boolea
   const [target, setTarget] = useState("");
   const { state, send } = useUpload((id) => { if (id !== cvId) router.push(`/dashboard/curriculo?cv=${id}`); router.refresh(); });
   const busy = state.t === "busy";
-  const go = (f: File) => send(f, { cvId, target: target.trim() || undefined });
+  // a análise é feita para um cargo: sem cargo-alvo, o envio não libera
+  const needTarget = !!askTarget && target.trim().length < 2;
+  const go = (f: File) => { if (!needTarget) send(f, { cvId, target: target.trim() || undefined }); };
 
   return (
     <div>
       {askTarget && (
         <label className="mb-3 block">
-          <span className="mb-1.5 block text-sm font-medium">Para qual cargo é este currículo? <span className="font-normal text-ink-3">(opcional, deixa a análise mais precisa)</span></span>
-          <input value={target} onChange={(e) => setTarget(e.target.value)} maxLength={120} placeholder="ex.: Head de Growth, Product Manager sênior"
+          <span className="mb-1.5 block text-sm font-medium"><span className="mr-1.5 inline-grid size-5 place-items-center rounded-full bg-accent text-[11px] font-bold text-accent-ink">1</span>Para qual cargo é este currículo?</span>
+          <input value={target} onChange={(e) => setTarget(e.target.value)} maxLength={120} placeholder="ex.: Head de Growth, Product Manager sênior" required
             className="w-full rounded-xl border border-line bg-bg px-4 py-3 outline-none transition focus:border-accent focus:ring-4 focus:ring-accent/15" />
+          <span className="mt-1.5 block text-xs text-ink-3">A nota, as palavras-chave e as sugestões são para este cargo. Ele também vira o nome do currículo.</span>
         </label>
       )}
-      <button type="button" disabled={busy || !configured} onClick={() => input.current?.click()}
+      {askTarget && <p className="mb-1.5 text-sm font-medium"><span className="mr-1.5 inline-grid size-5 place-items-center rounded-full bg-accent text-[11px] font-bold text-accent-ink">2</span>Envie o arquivo</p>}
+      <button type="button" disabled={busy || !configured || needTarget} onClick={() => input.current?.click()}
         onDragOver={(e) => { e.preventDefault(); setDrag(true); }} onDragLeave={() => setDrag(false)}
         onDrop={(e) => { e.preventDefault(); setDrag(false); const f = e.dataTransfer.files[0]; if (f) go(f); }}
         className={`flex w-full items-center gap-4 rounded-3xl border-2 border-dashed text-left transition disabled:cursor-not-allowed ${compact ? "p-4" : "p-5 sm:p-7"} ${drag ? "border-accent bg-accent-soft" : "border-line bg-surface hover:border-accent/60"}`}>
@@ -85,7 +89,7 @@ function Dropzone({ configured, compact, cvId, askTarget }: { configured: boolea
         </span>
         <span className="min-w-0">
           <span className="block font-semibold">{busy ? `Analisando ${state.name}…` : cvId ? "Enviar nova versão deste currículo" : "Envie seu currículo"}</span>
-          <span className="block text-sm text-ink-3">{busy ? "A IA está lendo seção por seção. Leva uns 30 segundos." : "PDF, DOCX ou TXT, até 5 MB. Toque ou arraste o arquivo aqui."}</span>
+          <span className="block text-sm text-ink-3">{busy ? "A IA está lendo seção por seção. Leva uns 30 segundos." : needTarget ? "Primeiro diga o cargo-alvo, acima." : "PDF, DOCX ou TXT, até 5 MB. Toque ou arraste o arquivo aqui."}</span>
         </span>
       </button>
       <input ref={input} type="file" hidden accept=".pdf,.docx,.txt,.md,application/pdf" onChange={(e) => { const f = e.target.files?.[0]; if (f) go(f); e.target.value = ""; }} />
@@ -106,7 +110,7 @@ function Empty({ configured }: { configured: boolean }) {
     <div className="mt-6 space-y-6">
       <ModuleTip id="resume" />
       <Dropzone configured={configured} askTarget />
-      <p className="flex items-start gap-2 text-xs text-ink-3"><ShieldCheck className="mt-0.5 size-4 shrink-0 text-ok" /> Guardamos só o <strong className="font-medium text-ink-2">texto</strong> do currículo, para você aceitar sugestões e comparar com as vagas. O arquivo é descartado, e você apaga tudo quando quiser.</p>
+      <p className="flex items-start gap-2 text-xs text-ink-3"><ShieldCheck className="mt-0.5 size-4 shrink-0 text-ok" /><span>Guardamos só o <strong className="font-medium text-ink-2">texto</strong> do currículo, para você aceitar sugestões e comparar com as vagas. O arquivo é descartado, e você apaga tudo quando quiser.</span></p>
       <ol className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {steps.map(({ i: Icon, t, d }, n) => (
           <li key={t} className="anim-rise relative rounded-3xl border border-line bg-surface p-5 shadow-card" style={{ animationDelay: `${n * 60}ms` }}>
@@ -134,8 +138,8 @@ function CvSwitcher({ cvs, current, configured }: { cvs: CvLite[]; current: stri
             className={`flex min-h-14 shrink-0 items-center gap-2.5 rounded-2xl border py-2 pr-4 pl-2 text-left transition ${c.id === current ? "border-ink bg-surface shadow-card" : "border-line bg-surface/60 hover:bg-surface"}`}>
             <ScoreRing value={c.score} size={38} />
             <span className="min-w-0">
-              <span className="flex items-center gap-1.5 text-sm font-semibold whitespace-nowrap">{c.name}{c.is_primary ? <span className="rounded-full bg-accent-soft px-1.5 text-[10px] font-semibold text-accent">principal</span> : null}</span>
-              <span className="block max-w-[180px] truncate text-xs text-ink-3">{c.target_role || "geral"}</span>
+              <span className="block max-w-[200px] truncate text-sm font-semibold">{c.target_role || <span className="text-accent">Defina o cargo-alvo</span>}</span>
+              <span className="block text-xs text-ink-3">{c.is_primary ? "principal · " : ""}nota {c.score}</span>
             </span>
           </Link>
         ))}
@@ -178,7 +182,7 @@ function NewCv({ cvs, configured, onDone }: { cvs: CvLite[]; configured: boolean
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="block"><span className="mb-1.5 block text-sm font-medium">A partir de</span>
               <select value={from} onChange={(e) => setFrom(e.target.value)} className="w-full rounded-xl border border-line bg-bg px-3 py-3 text-sm outline-none focus:border-accent">
-                {cvs.map((c) => <option key={c.id} value={c.id}>{c.name}{c.target_role ? ` · ${c.target_role}` : ""}</option>)}
+                {cvs.map((c) => <option key={c.id} value={c.id}>{c.target_role || c.name}</option>)}
               </select>
             </label>
             <label className="block"><span className="mb-1.5 block text-sm font-medium">Para o cargo</span>
@@ -205,41 +209,53 @@ function NewCv({ cvs, configured, onDone }: { cvs: CvLite[]; configured: boolean
 
 function CvHeader({ cv, usedBy }: { cv: Resume; usedBy: UsedBy }) {
   const router = useRouter();
-  const [editing, setEditing] = useState(false);
-  const [name, setName] = useState(cv.name);
+  const flags = useAiFlags();
+  const missing = !cv.target_role.trim();
+  const [editing, setEditing] = useState(missing);
   const [target, setTarget] = useState(cv.target_role);
   const [pending, start] = useTransition();
-  const save = () => start(async () => { await updateCvMetaAction(cv.id, name, target); setEditing(false); router.refresh(); });
-  const changedTarget = target.trim() !== cv.target_role.trim();
+  const [err, setErr] = useState<string | null>(null);
+  // trocar o cargo-alvo já refaz a análise: nota e sugestões só valem para um cargo
+  const save = () => start(async () => {
+    setErr(null);
+    const r = await setCvTargetAction(cv.id, target);
+    if (!r.ok) return setErr(r.error);
+    setEditing(false);
+    router.refresh();
+  });
   return (
-    <section className="anim-rise rounded-3xl border border-line bg-surface p-5 shadow-card sm:p-6">
+    <section className={`anim-rise rounded-3xl border p-5 shadow-card sm:p-6 ${missing ? "border-accent/40 bg-accent-soft/50" : "border-line bg-surface"}`}>
       {editing ? (
-        <div className="grid gap-3 sm:grid-cols-[1fr_1.3fr_auto] sm:items-end">
-          <label className="block"><span className="mb-1 block text-xs font-medium text-ink-3">Nome</span>
-            <input value={name} onChange={(e) => setName(e.target.value)} maxLength={60} className="w-full rounded-xl border border-line bg-bg px-3 py-2.5 text-sm outline-none focus:border-accent" /></label>
-          <label className="block"><span className="mb-1 block text-xs font-medium text-ink-3">Cargo-alvo</span>
-            <input value={target} onChange={(e) => setTarget(e.target.value)} maxLength={120} placeholder="vazio = análise geral" className="w-full rounded-xl border border-line bg-bg px-3 py-2.5 text-sm outline-none focus:border-accent" /></label>
-          <div className="flex gap-2">
-            <button disabled={pending} onClick={save} className="min-h-10 rounded-full bg-ink px-4 text-sm font-medium text-bg">{pending ? "Salvando…" : "Salvar"}</button>
-            <button onClick={() => { setEditing(false); setName(cv.name); setTarget(cv.target_role); }} className="min-h-10 rounded-full px-3 text-sm text-ink-3">Cancelar</button>
+        <div>
+          <p className="text-sm font-medium">{missing ? "Para qual cargo é este currículo?" : "Trocar o cargo-alvo"}</p>
+          <p className="mt-0.5 text-xs text-ink-3">{missing ? "A análise precisa de um cargo-alvo para valer. Ele também vira o nome do currículo." : "A nota e as sugestões são refeitas para o novo cargo."}</p>
+          <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+            <input value={target} onChange={(e) => setTarget(e.target.value)} maxLength={120} placeholder="ex.: Head de Growth" autoFocus
+              onKeyDown={(e) => { if (e.key === "Enter" && target.trim().length > 1) save(); }}
+              className="min-w-0 flex-1 rounded-xl border border-line bg-bg px-4 py-3 outline-none focus:border-accent focus:ring-4 focus:ring-accent/15" />
+            <button disabled={pending || target.trim().length < 2 || !flags.resume} onClick={save}
+              className="inline-flex min-h-12 items-center justify-center gap-2 rounded-full bg-accent px-5 text-sm font-medium text-accent-ink disabled:opacity-50">
+              {pending ? <><Loader2 className="spin size-4" /> Analisando…</> : <><Sparkles className="size-4" /> {missing ? "Analisar para este cargo" : "Salvar e reanalisar"}</>}
+            </button>
+            {!missing && <button onClick={() => { setEditing(false); setTarget(cv.target_role); }} className="min-h-12 rounded-full px-4 text-sm text-ink-3">Cancelar</button>}
           </div>
-          {changedTarget && <p className="text-xs text-ink-3 sm:col-span-3">Depois de salvar, toque em <strong className="font-medium text-ink-2">Reanalisar</strong> para a nota e as sugestões considerarem o novo cargo.</p>}
+          {err && <p role="alert" className="mt-2 rounded-xl bg-accent-soft px-3 py-2 text-sm text-accent">{err}</p>}
         </div>
       ) : (
         <div className="flex flex-wrap items-start gap-3">
           <div className="min-w-0 flex-1">
-            <p className="flex flex-wrap items-center gap-2">
-              <span className="font-display text-2xl leading-tight sm:text-3xl">{cv.name}</span>
+            <p className="text-xs font-medium tracking-wider text-ink-3 uppercase">Cargo-alvo</p>
+            <p className="mt-0.5 flex flex-wrap items-center gap-2">
+              <span className="font-display text-2xl leading-tight sm:text-3xl">{cv.target_role}</span>
               {cv.is_primary ? <span className="rounded-full bg-accent-soft px-2 py-0.5 text-xs font-semibold text-accent">principal</span> : null}
             </p>
-            <p className="mt-0.5 text-sm text-ink-2">Cargo-alvo: <strong className="font-medium text-ink">{cv.target_role || "geral (sem cargo definido)"}</strong></p>
             <p className="mt-2 text-xs text-ink-3">
               {usedBy.length ? <>Usado em {usedBy.length === 1 ? "1 busca" : `${usedBy.length} buscas`}: {usedBy.map((s) => s.name).join(", ")}.</> : "Nenhuma busca usa este currículo ainda."}
               {" "}Troque o currículo de uma busca na barra da própria busca.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <button onClick={() => setEditing(true)} className="inline-flex min-h-10 items-center gap-1.5 rounded-full border border-line px-4 text-sm font-medium hover:bg-surface-2"><Pencil className="size-4" /> Nome e cargo</button>
+            <button onClick={() => setEditing(true)} className="inline-flex min-h-10 items-center gap-1.5 rounded-full border border-line px-4 text-sm font-medium hover:bg-surface-2"><Pencil className="size-4" /> Trocar cargo</button>
             {!cv.is_primary && (
               <button disabled={pending} onClick={() => start(async () => { await setPrimaryCvAction(cv.id); router.refresh(); })}
                 className="inline-flex min-h-10 items-center gap-1.5 rounded-full border border-line px-4 text-sm font-medium hover:bg-surface-2"><Star className="size-4" /> Tornar principal</button>
@@ -319,7 +335,7 @@ function Loaded({ resume, jobs, quota, configured, autoFit }: { resume: Resume; 
               </div>
             </div>
             <div className="scroll-thin -mx-5 mt-4 flex gap-2 overflow-x-auto px-5 pb-1 sm:mx-0 sm:flex-wrap sm:px-0">
-              <button className={`${btn} !border-ink !bg-ink !text-bg`} disabled={pending || !configured} onClick={reanalyze}>
+              <button className={`${btn} !border-ink !bg-ink !text-bg`} disabled={pending || !configured || !resume.target_role.trim()} onClick={reanalyze} title={resume.target_role.trim() ? undefined : "Defina o cargo-alvo primeiro"}>
                 <RefreshCw className={`size-4 ${pending ? "spin" : ""}`} /> {pending ? "Analisando…" : "Reanalisar"}
               </button>
               <button className={btn} onClick={download}><Download className="size-4" /> .txt</button>
@@ -346,7 +362,7 @@ function Loaded({ resume, jobs, quota, configured, autoFit }: { resume: Resume; 
             </div>
           )}
 
-          <Dropzone configured={configured} compact cvId={resume.id} />
+          {resume.target_role.trim() && <Dropzone configured={configured} compact cvId={resume.id} />}
         </section>
       </div>
 

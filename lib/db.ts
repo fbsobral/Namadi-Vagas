@@ -501,7 +501,7 @@ const COMPANY_KEY_SQL = "lower(regexp_replace(trim(j.company), '\\s+', ' ', 'g')
 const PENDING_MS = 4 * 60_000; // busca de contatos 'pendente' há mais que isso é considerada travada
 const JOB_COLS = `j.*, (j.contacts_status = 'pending' AND COALESCE(j.contacts_at, 0) < ${Date.now() - PENDING_MS}) AS contacts_stale, s.name AS search_name, s.color AS search_color, (s.user_id = ?) AS is_owner,
        COALESCE(u.favorite, 0) AS favorite, u.favorited_at AS favorited_at, COALESCE(u.seen, 0) AS seen, u.stage AS stage, COALESCE(u.stage_pos, 0) AS stage_pos,
-       f.score AS fit_score, f.resume_at AS fit_resume_at, ec.id AS cv_id, ec.name AS cv_name, ec.updated_at AS cv_updated_at, co.model AS co_model, co.industry AS co_industry, co.size AS co_size`;
+       f.score AS fit_score, f.resume_at AS fit_resume_at, ec.id AS cv_id, COALESCE(NULLIF(ec.target_role, ''), ec.name) AS cv_name, ec.updated_at AS cv_updated_at, co.model AS co_model, co.industry AS co_industry, co.size AS co_size`;
 const JOB_FROM = `FROM jobs j JOIN searches s ON s.id = j.search_id LEFT JOIN job_user u ON u.job_id = j.id AND u.user_id = ? 
   LEFT JOIN search_cv sc ON sc.search_id = j.search_id AND sc.user_id = ?
   LEFT JOIN cvs pc ON pc.user_id = ? AND pc.is_primary = 1

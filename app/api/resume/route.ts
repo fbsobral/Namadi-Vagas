@@ -1,6 +1,6 @@
 import { getUserId } from "@/lib/auth";
 import { analyzeResume, CV_MAX_BYTES, CvError, fileContent } from "@/lib/resume";
-import { countCvs, createCv, getCv, MAX_CVS, rateLimit, saveCvAnalysis } from "@/lib/db";
+import { countCvs, createCv, getCv, MAX_CVS, rateLimit, saveCvAnalysis, updateCvMeta } from "@/lib/db";
 import { getAiConfig } from "@/lib/ai-config";
 
 export const dynamic = "force-dynamic";
@@ -27,7 +27,9 @@ export async function POST(req: Request) {
   const existing = cvId ? await getCv(userId, cvId) : null;
   if (cvId && !existing) return Response.json({ error: "Currículo não encontrado." }, { status: 404 });
   if (!existing && (await countCvs(userId)) >= MAX_CVS) return Response.json({ error: `Você já tem ${MAX_CVS} currículos. Apague um para enviar outro.` }, { status: 400 });
-  const target = existing ? existing.target_role : clean(form?.get("target"), 120);
+  // a análise é sempre para um cargo: currículo novo precisa do cargo-alvo; ao trocar o arquivo, vale o do currículo
+  const target = clean(form?.get("target"), 120) || existing?.target_role || "";
+  if (target.length < 2) return Response.json({ error: "Diga primeiro o cargo-alvo deste currículo." }, { status: 400 });
 
   try {
     const DAILY = (await getAiConfig()).features.resume.daily;
@@ -36,11 +38,12 @@ export async function POST(req: Request) {
     const { text, analysis } = await analyzeResume(content, target);
     const fileName = file.name.slice(0, 120);
     if (existing) {
+      if (target !== existing.target_role) await updateCvMeta(userId, existing.id, target.slice(0, 60), target);
       await saveCvAnalysis(existing.id, fileName, text, analysis);
       return Response.json({ ok: true, id: existing.id });
     }
-    const name = clean(form?.get("name"), 60) || target || analysis.role || "Meu currículo";
-    const id = await createCv(userId, { name, target_role: target, file_name: fileName, text, analysis });
+    // o nome do currículo é o próprio cargo-alvo
+    const id = await createCv(userId, { name: target.slice(0, 60), target_role: target, file_name: fileName, text, analysis });
     return Response.json({ ok: true, id });
   } catch (e) {
     if (e instanceof CvError) return Response.json({ error: e.message }, { status: e.status });

@@ -304,14 +304,14 @@ export const GUIDES: Record<GuideId, Guide> = {
         icon: "file",
         visual: "resumeScore",
         title: "Uma nota para o seu currículo",
-        body: "Envie PDF, DOCX ou TXT. A IA dá uma nota de 0 a 100 e mostra onde você vai bem e onde perde pontos: abrangência, estrutura, clareza, impacto e leitura por sistemas de triagem (ATS).",
-        bullets: ["Diga o cargo-alvo: a nota e as sugestões passam a ser para aquele cargo", "Guardamos só o texto, nunca o arquivo; “Apagar” remove tudo"],
+        body: "Diga o cargo-alvo e envie PDF, DOCX ou TXT. A IA dá uma nota de 0 a 100 e mostra onde você vai bem e onde perde pontos: abrangência, estrutura, clareza, impacto e leitura por sistemas de triagem (ATS).",
+        bullets: ["Primeiro diga o cargo-alvo: a análise é sempre para um cargo, e ele vira o nome do currículo", "Guardamos só o texto, nunca o arquivo; “Apagar” remove tudo"],
       },
       {
         icon: "file",
         visual: "cvTabs",
         title: "Novo: um currículo para cada objetivo",
-        body: "Tenha até 5 versões, cada uma com um cargo-alvo (ex.: Growth e Product). Crie enviando outro arquivo ou toque em “Adaptar um existente”: a IA reescreve o currículo para o novo cargo, sem inventar nada.",
+        body: "Tenha até 5 versões, uma para cada cargo-alvo (ex.: Head de Growth e Product Manager). Crie enviando outro arquivo ou toque em “Adaptar um existente”: a IA reescreve o currículo para o novo cargo, sem inventar nada.",
         bullets: ["Um deles é o principal", "Em cada busca, escolha na barra qual currículo comparar com as vagas"],
       },
       {
@@ -361,7 +361,7 @@ export const GUIDES: Record<GuideId, Guide> = {
         icon: "file",
         visual: "linkedinScore",
         title: "Seu perfil, avaliado para o cargo que você quer",
-        body: "No LinkedIn, abra seu perfil e use “Mais › Salvar como PDF”. Envie aqui (ou cole o texto) e diga o cargo-alvo. A IA dá uma nota para título, Sobre, experiências, competências e o quanto você aparece nas buscas de recrutadores.",
+        body: "Primeiro diga para qual cargo você quer ser encontrado. Depois, no LinkedIn, abra seu perfil, use “Mais › Salvar como PDF” e envie aqui (ou cole o texto). A IA dá uma nota para título, Sobre, experiências, competências e o quanto você aparece nas buscas de recrutadores.",
         bullets: ["O robô não entra no seu LinkedIn: você manda o PDF", "Guardamos só o texto e você apaga quando quiser"],
       },
       {

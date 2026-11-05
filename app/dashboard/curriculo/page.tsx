@@ -25,7 +25,7 @@ export default async function CurriculoPage({ searchParams }: { searchParams: Pr
   const jobs = cv ? await listJobsForFit(userId, cv.id) : [];
   const primaryId = cvs.find((c) => c.is_primary)?.id;
   const usedBy = cv ? searches.filter((s) => (chosen[s.id] ?? primaryId) === cv.id).map((s) => ({ id: s.id, name: s.name, color: s.color })) : [];
-  const lite = cvs.map((c) => ({ id: c.id, name: c.name, target_role: c.target_role, is_primary: c.is_primary, score: c.analysis.score, updated_at: c.updated_at }));
+  const lite = cvs.map((c) => ({ id: c.id, name: c.target_role || c.name, target_role: c.target_role, is_primary: c.is_primary, score: c.analysis.score, updated_at: c.updated_at }));
 
   return (
     <AiFlagsProvider flags={flags}>
