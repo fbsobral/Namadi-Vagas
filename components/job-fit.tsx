@@ -7,10 +7,12 @@ import { Check, Copy, FileText, Loader2, PenLine, RefreshCw, Sparkles, Star } fr
 import { coverLetterAction, jobFitAction } from "@/app/actions";
 import { fitLabel, type JobFitRow } from "@/lib/resume-shared";
 import { ScoreRing } from "./score-ring";
+import { useAiFlags } from "./ai-flags";
 
 /** "Seu currículo x esta vaga": compatibilidade, o que falta, currículo adaptado e carta de apresentação. */
 export function JobFit({ jobId, hasResume, resumeAt, initial }: { jobId: string; hasResume: boolean; resumeAt: number | null; initial: JobFitRow | null }) {
   const router = useRouter();
+  const flags = useAiFlags();
   const [row, setRow] = useState(initial);
   const [letter, setLetter] = useState(initial?.letter ?? null);
   const [err, setErr] = useState<string | null>(null);
@@ -38,6 +40,8 @@ export function JobFit({ jobId, hasResume, resumeAt, initial }: { jobId: string;
   };
 
   const fit = row?.fit ?? null;
+  // recurso desligado no /admin e nada calculado antes: a seção some
+  if (!fit && !flags.fit) return null;
   const stale = !!(fit && resumeAt && row && row.resume_at < resumeAt);
 
   return (
@@ -47,7 +51,7 @@ export function JobFit({ jobId, hasResume, resumeAt, initial }: { jobId: string;
           <h3 className="font-display text-3xl">Seu currículo x esta vaga</h3>
           <p className="mt-1 text-sm text-ink-3">Compatibilidade, o que falta e o currículo adaptado, com IA.</p>
         </div>
-        {fit && <button disabled={!!busy} onClick={() => runFit(true)} className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-line bg-surface px-3 py-1.5 text-[13px] font-medium transition hover:bg-surface-2 disabled:opacity-50"><RefreshCw className={`size-3.5 ${busy === "fit" ? "spin" : ""}`} /> Refazer</button>}
+        {fit && !fit.quick && flags.fit && <button disabled={!!busy} onClick={() => runFit(true)} className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-line bg-surface px-3 py-1.5 text-[13px] font-medium transition hover:bg-surface-2 disabled:opacity-50"><RefreshCw className={`size-3.5 ${busy === "fit" ? "spin" : ""}`} /> Refazer</button>}
       </div>
 
       {!hasResume ? (
@@ -72,10 +76,17 @@ export function JobFit({ jobId, hasResume, resumeAt, initial }: { jobId: string;
               {fit.score >= 85
                 ? <span className="inline-flex items-center gap-1 rounded-full bg-ok px-2.5 py-1 text-[11px] font-bold tracking-wide text-white uppercase"><Star className="size-3 fill-current" /> Top match</span>
                 : <p className="text-sm font-semibold">{fitLabel(fit.score)}</p>}
-              <p className="mt-1.5 text-sm text-ink-2">{fit.verdict}</p>
+              {fit.verdict ? <p className="mt-1.5 text-sm text-ink-2">{fit.verdict}</p> : <p className="mt-1.5 text-xs text-ink-3">checagem rápida</p>}
             </div>
           </div>
 
+          {fit.quick && flags.fit && (
+            <button disabled={!!busy} onClick={() => runFit(true)}
+              className="flex w-full items-center gap-3 rounded-2xl border border-accent/40 bg-accent-soft/60 p-3.5 text-left transition hover:bg-accent-soft disabled:opacity-70">
+              <span className="grid size-10 shrink-0 place-items-center rounded-full bg-accent text-accent-ink">{busy === "fit" ? <Loader2 className="spin size-5" /> : <Sparkles className="size-5" />}</span>
+              <span className="min-w-0"><span className="block text-sm font-semibold">{busy === "fit" ? "Fazendo a análise completa…" : "Ver análise completa"}</span><span className="block text-xs text-ink-2">Esta é a checagem rápida. A completa traz dicas e o currículo adaptado para a vaga.</span></span>
+            </button>
+          )}
           {fit.matched.length > 0 && <Chips title="Você atende" items={fit.matched} tone="ok" />}
           {fit.missing.length > 0 && <Chips title="Falta ou não aparece no seu currículo" items={fit.missing} tone="miss" />}
 
@@ -97,6 +108,7 @@ export function JobFit({ jobId, hasResume, resumeAt, initial }: { jobId: string;
             </div>
           )}
 
+          {(flags.letter || letter) && (
           <div className="rounded-2xl border border-line bg-surface p-4">
             <div className="flex items-center justify-between gap-2">
               <p className="flex items-center gap-2 text-sm font-semibold"><PenLine className="size-4 text-accent" /> Carta de apresentação</p>
@@ -105,7 +117,7 @@ export function JobFit({ jobId, hasResume, resumeAt, initial }: { jobId: string;
             {letter ? (
               <>
                 <p className="mt-3 text-sm leading-relaxed whitespace-pre-line text-ink-2">{letter}</p>
-                <button disabled={!!busy} onClick={runLetter} className="mt-3 inline-flex items-center gap-1.5 text-sm font-medium text-ink-3 hover:text-ink disabled:opacity-50"><RefreshCw className={`size-3.5 ${busy === "letter" ? "spin" : ""}`} /> Escrever outra</button>
+                {flags.letter && <button disabled={!!busy} onClick={runLetter} className="mt-3 inline-flex items-center gap-1.5 text-sm font-medium text-ink-3 hover:text-ink disabled:opacity-50"><RefreshCw className={`size-3.5 ${busy === "letter" ? "spin" : ""}`} /> Escrever outra</button>}
               </>
             ) : (
               <button disabled={!!busy} onClick={runLetter} className="mt-3 inline-flex min-h-10 items-center gap-2 rounded-full bg-ink px-4 text-sm font-medium text-bg disabled:opacity-60">
@@ -113,6 +125,7 @@ export function JobFit({ jobId, hasResume, resumeAt, initial }: { jobId: string;
               </button>
             )}
           </div>
+          )}
         </div>
       )}
       {err && <p role="alert" className="mt-4 rounded-xl bg-accent-soft px-3 py-2 text-sm text-accent">{err}</p>}

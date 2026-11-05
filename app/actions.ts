@@ -337,7 +337,6 @@ export async function resetGuides() {
 
 /* ---------- currículo ---------- */
 
-const RESUME_DAILY = Number(process.env.RESUME_DAILY_LIMIT || 8);
 
 async function myResume(userId: string) {
   const r = await q.getResume(userId);
@@ -388,6 +387,8 @@ export async function reanalyzeResumeAction() {
   const userId = await uid();
   return friendly(async () => {
     const r = await myResume(userId);
+    const { getAiConfig } = await import("@/lib/ai-config");
+    const RESUME_DAILY = (await getAiConfig()).features.resume.daily;
     await q.rateLimit("resume", userId, RESUME_DAILY, 86400_000, `Limite de ${RESUME_DAILY} análises de currículo por dia atingido. Tente amanhã.`);
     const { analyzeText } = await import("@/lib/resume");
     const { analysis } = await analyzeText(r.text);
@@ -402,6 +403,23 @@ export async function deleteResumeAction() {
   refresh();
 }
 
+/** Compara o currículo com a vaga (guarda o resultado; `force` refaz). */
+export async function jobFitAction(jobId: string, force = false) {
+  const userId = await uid();
+  return friendly(async () => {
+    const { computeFit } = await import("@/lib/resume-service");
+    const row = await computeFit(userId, jobId, { force });
+    refresh();
+    return row;
+  });
+}
+
+/** Liga/desliga o cálculo automático da compatibilidade das vagas novas. */
+export async function setAutoFitAction(on: boolean) {
+  await q.setAutoFit(await uid(), on);
+  refresh();
+}
+
 async function jobForAi(userId: string, jobId: string) {
   const job = await q.getJob(userId, jobId);
   if (!job) throw new Error("Vaga não encontrada");
@@ -412,30 +430,40 @@ async function jobForAi(userId: string, jobId: string) {
   return { title: job.title, company: job.company, location: job.location, description };
 }
 
-/** Compara o currículo com a vaga (guarda o resultado; `force` refaz). */
-export async function jobFitAction(jobId: string, force = false) {
-  const userId = await uid();
-  return friendly(async () => {
-    const r = await myResume(userId);
-    const cur = await q.getJobFit(userId, jobId);
-    if (cur?.fit && !force && cur.resume_at >= r.updated_at) return cur;
-    await q.rateLimit("fit", userId, 40, 86400_000, "Limite diário de comparações atingido. Tente amanhã.");
-    const { fitJob } = await import("@/lib/resume");
-    const fit = await fitJob(r.text, await jobForAi(userId, jobId));
-    await q.saveJobFit(userId, jobId, fit, r.updated_at);
-    refresh();
-    return (await q.getJobFit(userId, jobId))!;
-  });
-}
-
 export async function coverLetterAction(jobId: string) {
   const userId = await uid();
   return friendly(async () => {
     const r = await myResume(userId);
-    await q.rateLimit("letter", userId, 20, 86400_000, "Limite diário de cartas atingido. Tente amanhã.");
+    const { getAiConfig } = await import("@/lib/ai-config");
+    await q.rateLimit("letter", userId, (await getAiConfig()).features.letter.daily, 86400_000, "Limite diário de cartas atingido. Tente amanhã.");
     const { coverLetter } = await import("@/lib/resume");
     const letter = await coverLetter(r.text, await jobForAi(userId, jobId));
     await q.saveLetter(userId, jobId, letter, r.updated_at);
     return letter;
   });
+}
+
+/* ---------- admin: IA ---------- */
+
+async function requireAdmin() {
+  const { isAdminViewer } = await import("@/lib/auth");
+  const v = await getViewer();
+  if (!isAdminViewer(v)) throw new Error("Acesso restrito a administradores.");
+  return v!;
+}
+
+/** Salva a configuração de IA (só administradores). Valida tudo no servidor. */
+export async function saveAiConfigAction(input: unknown) {
+  await requireAdmin();
+  const { AI_FEATURES, AI_MODELS } = await import("@/lib/ai-shared");
+  const { saveAiConfig } = await import("@/lib/ai-config");
+  const i = (input ?? {}) as { enabled?: unknown; features?: Record<string, { enabled?: unknown; model?: unknown; daily?: unknown }> };
+  const features = Object.fromEntries(AI_FEATURES.map((f) => {
+    const x = i.features?.[f.key] ?? {};
+    const model = AI_MODELS.some((m) => m.id === x.model) ? (x.model as string) : f.model();
+    const daily = Math.min(Math.max(Math.round(Number(x.daily)), 0), 100_000);
+    return [f.key, { enabled: x.enabled !== false, model, daily: Number.isFinite(daily) ? daily : f.daily() }];
+  }));
+  await saveAiConfig({ enabled: i.enabled !== false, features } as never);
+  revalidatePath("/", "layout");
 }

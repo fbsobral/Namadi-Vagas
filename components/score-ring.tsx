@@ -3,8 +3,8 @@
 
 export const scoreTone = (n: number) => (n >= 85 ? "var(--ok)" : n >= 70 ? "#14A37F" : n >= 50 ? "#E0A100" : "var(--accent)");
 
-export function ScoreRing({ value, size = 120, stroke, suffix = "", label, className = "" }: {
-  value: number; size?: number; stroke?: number; suffix?: string; label?: string; className?: string;
+export function ScoreRing({ value, size = 120, stroke, suffix = "", label, className = "", hideValue = false }: {
+  value: number; size?: number; stroke?: number; suffix?: string; label?: string; className?: string; hideValue?: boolean;
 }) {
   const w = stroke ?? Math.max(5, Math.round(size / 11));
   const r = (size - w) / 2;
@@ -17,7 +17,7 @@ export function ScoreRing({ value, size = 120, stroke, suffix = "", label, class
         <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={scoreTone(v)} strokeWidth={w} strokeLinecap="round"
           strokeDasharray={c} className="ring-fill" style={{ ["--ring-c" as string]: c, ["--ring-to" as string]: c * (1 - v / 100), strokeDashoffset: c * (1 - v / 100) }} />
       </svg>
-      <span className="absolute font-semibold tabular-nums" style={{ fontSize: Math.round(size * (suffix ? 0.24 : 0.3)) }}>{v}{suffix}</span>
+      {!hideValue && <span className="absolute font-semibold tabular-nums" style={{ fontSize: Math.round(size * (suffix ? 0.24 : 0.3)) }}>{v}{suffix}</span>}
     </span>
   );
 }

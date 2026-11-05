@@ -280,8 +280,8 @@ export const GUIDES: Record<GuideId, Guide> = {
         icon: "star",
         visual: "resumeFit",
         title: "Compatibilidade com cada vaga",
-        body: "Abra uma vaga e toque em “Ver compatibilidade”: a % de match, os requisitos que você atende, os que faltam e um resumo do currículo reescrito para aquela vaga.",
-        bullets: ["A % aparece também no cartão da vaga", "As mais compatíveis ficam listadas na área Currículo"],
+        body: "Cada vaga nova já ganha a % de compatibilidade sozinha, e ela aparece no cartão. Na área Currículo, verifique as antigas uma a uma ou todas de uma vez. Abra a vaga para a análise completa: o que falta e o currículo adaptado.",
+        bullets: ["Na lista de vagas, ordene por “Mais compatíveis” ou filtre por Top match", "Dá para desligar a verificação automática na área Currículo"],
       },
       {
         icon: "copy",

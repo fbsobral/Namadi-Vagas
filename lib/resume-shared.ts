@@ -28,6 +28,7 @@ export type ResumeAnalysis = {
   strengths: string[];
   keywords: string[];
   role: string;
+  profile?: string; // perfil compacto (~60 palavras) usado na checagem rápida de compatibilidade
   suggestions: ResumeSuggestion[];
 };
 
@@ -39,6 +40,7 @@ export type JobFit = {
   tips: string[];
   summary: string; // resumo profissional reescrito para esta vaga
   bullets: string[]; // destaques reescritos para esta vaga
+  quick?: boolean; // checagem rápida (só nota e palavras-chave); a completa é pedida na vaga
 };
 
 export type Resume = {
@@ -49,6 +51,7 @@ export type Resume = {
   created_at: number;
   updated_at: number; // muda a cada sugestão aceita ou nova análise
   analyzed_at: number;
+  auto_fit: number; // 1 = calcula sozinho a compatibilidade das vagas novas
 };
 
 export type JobFitRow = { job_id: string; fit: JobFit | null; letter: string | null; resume_at: number; updated_at: number };

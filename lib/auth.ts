@@ -28,3 +28,9 @@ export async function getViewer(): Promise<Viewer | null> {
   const name = [u.firstName, u.lastName].filter(Boolean).join(" ") || u.username || (primary ? primary.split("@")[0] : "Alguém");
   return { userId: u.id, name, firstName: u.firstName, email: primary, emails };
 }
+
+/** Administradores da plataforma: e-mails VERIFICADOS listados em ADMIN_EMAILS (separados por vírgula). */
+export function isAdminViewer(v: Viewer | null) {
+  const admins = (process.env.ADMIN_EMAILS ?? "").split(",").map((e) => e.trim().toLowerCase()).filter(Boolean);
+  return !!v && admins.length > 0 && v.emails.some((e) => admins.includes(e));
+}

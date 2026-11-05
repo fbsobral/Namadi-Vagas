@@ -1,8 +1,10 @@
 import { redirect } from "next/navigation";
 import { UserButton } from "@clerk/nextjs";
-import { getUserId, getViewer } from "@/lib/auth";
-import { getKv, getResume, getSeenGuides, jobCounts, listFits, listSearches } from "@/lib/db";
-import { resumeConfigured } from "@/lib/resume";
+import { getUserId, getViewer, isAdminViewer } from "@/lib/auth";
+import { aiFlags } from "@/lib/ai-config";
+import { AiFlagsProvider } from "@/components/ai-flags";
+import { getKv, getResume, getSeenGuides, jobCounts, listJobsForFit, listSearches } from "@/lib/db";
+import { fitQuota } from "@/lib/resume-service";
 import { isFresh } from "@/lib/format";
 import { Sidebar } from "@/components/sidebar";
 import { OnboardingProvider } from "@/components/onboarding";
@@ -14,14 +16,15 @@ export const dynamic = "force-dynamic";
 export default async function CurriculoPage() {
   const userId = await getUserId();
   if (!userId) redirect("/sign-in");
-  const [searches, counts, viewer, seenGuides, beat, resume, fits] = await Promise.all([
-    listSearches(userId), jobCounts(userId), getViewer(), getSeenGuides(userId), getKv("scheduler_heartbeat"), getResume(userId), listFits(userId),
+  const [searches, counts, viewer, seenGuides, beat, resume, jobs, quota, flags] = await Promise.all([
+    listSearches(userId), jobCounts(userId), getViewer(), getSeenGuides(userId), getKv("scheduler_heartbeat"), getResume(userId), listJobsForFit(userId), fitQuota(userId), aiFlags(),
   ]);
 
   return (
+    <AiFlagsProvider flags={flags}>
     <OnboardingProvider seen={seenGuides} hasSearches={searches.length > 0}>
       <div className="relative z-10 flex min-h-dvh flex-col lg:flex-row">
-        <Sidebar searches={searches} counts={counts} currentId={null} filter="all" view="cv" robotOnline={isFresh(beat?.updated_at, 3 * 60_000)}>
+        <Sidebar searches={searches} counts={counts} currentId={null} filter="all" view="cv" robotOnline={isFresh(beat?.updated_at, 3 * 60_000)} isAdmin={isAdminViewer(viewer)}>
           <UserButton />
           <div className="min-w-0 text-sm">
             <p className="truncate font-medium">{viewer?.firstName ?? viewer?.name ?? "Você"}</p>
@@ -39,10 +42,11 @@ export default async function CurriculoPage() {
               </div>
               <p className="mt-3 max-w-2xl text-ink-2">Nota, sugestões seção por seção, compatibilidade com cada vaga e carta de apresentação.</p>
             </header>
-            <ResumeModule resume={resume} fits={fits} configured={resumeConfigured()} />
+            <ResumeModule resume={resume} jobs={jobs} quota={quota} configured={flags.resume} />
           </div>
         </main>
       </div>
     </OnboardingProvider>
+    </AiFlagsProvider>
   );
 }

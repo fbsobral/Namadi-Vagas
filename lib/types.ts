@@ -56,6 +56,7 @@ export type Job = {
   filter_keep: number; // 1 = usuário mandou manter, não filtrar de novo
   is_owner?: boolean;
   fit_score?: number | null; // compatibilidade com o currículo, quando já calculada
+  fit_resume_at?: number | null; // versão do currículo usada nessa nota
   search_name?: string;
   search_color?: string;
 };

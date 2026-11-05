@@ -52,11 +52,18 @@ No editor da busca (dono), **Compartilhar** convida por e-mail. A pessoa vê o c
 Envie o currículo (PDF, DOCX ou TXT, até 5 MB) e a IA devolve:
 - **Nota de 0 a 100** e subnotas (abrangência, estrutura, clareza, impacto, leitura por ATS), pontos fortes e palavras-chave.
 - **Sugestões seção por seção** (trecho atual → versão melhor). Aceitar troca o trecho no texto guardado; dá para editar antes ou ignorar. **Reanalisar** gera nova nota a partir do texto atual. O texto pode ser editado, baixado em .txt ou impresso/salvo em PDF.
-- **Em cada vaga** (detalhes da vaga): % de compatibilidade (Top match a partir de 85), requisitos atendidos e faltantes, dicas, resumo e destaques reescritos para a vaga e **carta de apresentação**. A % aparece no cartão da vaga, e as mais compatíveis ficam listadas no módulo.
+- **Em cada vaga** (detalhes da vaga): análise completa com % de compatibilidade (Top match a partir de 85), requisitos atendidos e faltantes, dicas, resumo e destaques reescritos para a vaga e **carta de apresentação**.
+- **Checagem rápida** (pouco token): só a nota e até 3 palavras-chave atendidas/faltantes, com o perfil compacto do currículo (~60 palavras) e 10 vagas por chamada, em `claude-haiku-5-5` sem raciocínio e com esforço baixo. Roda **sozinha a cada vaga nova** do robô (para a dona e convidados com currículo; desligável no módulo) e na lista do módulo, que mostra todas as vagas para verificar uma, várias selecionadas ou todas as que faltam. A % aparece no cartão da vaga, e a lista do painel ordena por compatibilidade (`o=fit`) e filtra por faixa (`c=top|good|none`).
 
 Aqui, por escolha da pessoa, **o texto do currículo fica guardado** (tabela `resumes`; o arquivo nunca). "Apagar" remove o texto, a análise e todas as comparações (`job_fit`). A IA é instruída a não inventar experiência: quando falta um dado, marca o lugar com colchetes, como [X%].
 
-Modelo: `claude-opus-5-5` (troque com `AI_MODEL_RESUME`), saída estruturada validada e fallback do servidor ativado (`fallbacks: "default"`) para o caso de recusa por política. Requer `ANTHROPIC_API_KEY`. Limites por conta: `RESUME_DAILY_LIMIT` análises/dia (padrão 8), 40 comparações/dia e 20 cartas/dia.
+Modelos, limites e liga/desliga ficam no painel **Admin · IA** (abaixo). Saída estruturada validada; com Opus/Sonnet 5.5, fallback do servidor ativado (`fallbacks: "default"`) para o caso de recusa por política. Requer `ANTHROPIC_API_KEY`.
+
+## Admin · IA (`/admin`)
+Só para administradores: e-mails **verificados** listados em `ADMIN_EMAILS` (separados por vírgula). Para os demais a página não existe (404) e o link não aparece no menu; salvar também é conferido no servidor.
+- **Chave geral** que desliga toda a IA, e por recurso (preencher busca com CV, análise de currículo, compatibilidade completa, checagem rápida, checagem automática, carta, classificação de empresas): **ligado/desligado, modelo** (Opus/Sonnet/Haiku 5.5) e **limite diário por pessoa**. Fica no `kv` (`ai:config`) e vale em até 20 s; as telas escondem o que está desligado e o servidor recusa.
+- **Consumo** registrado a cada chamada (tabela `ai_usage`: chamadas, erros, tokens por dia, recurso e modelo) com custo estimado pelo preço de tabela (hoje, 7 e 30 dias). A fatura real fica no Claude Console.
+- As variáveis `AI_MODEL_*` e `*_DAILY_LIMIT` continuam valendo como **padrão** enquanto nada for salvo no painel.
 
 ## Preencher a busca com o CV
 No formulário da busca, **Preencher com meu currículo** (PDF, DOCX ou TXT, até 5 MB): o Claude (`claude-sonnet-5-5`, saída estruturada validada) lê o CV e sugere nome, grupos de palavras (cargos em português e inglês, senioridade), exclusões, local e até 2 variações que o CV sustente. Tudo fica editável e nada é criado até você confirmar. **O CV não é guardado**: é lido na hora e descartado. Requer `ANTHROPIC_API_KEY`; limite diário por usuário em `CV_DAILY_LIMIT` (padrão 10).
@@ -67,7 +74,7 @@ No formulário da busca, **Preencher com meu currículo** (PDF, DOCX ou TXT, at�
 - Em produção use as chaves **Production** do Clerk e defina `EMAIL_SECRET` (aleatório, 32+ caracteres). Sem ele os links de cancelamento de e-mail falham, de propósito.
 - `/api/cron` fica fechado (404) enquanto `CRON_SECRET` não existir; com ele, só responde a `Authorization: Bearer <segredo>`.
 - Links de vagas e contatos só viram clicáveis se forem `http(s)`. Cabeçalhos de segurança (anti-clickjacking, nosniff, HSTS, Referrer/Permissions-Policy) vêm do `next.config.ts`.
-- Limites por conta: análises de currículo (`RESUME_DAILY_LIMIT`), 40 comparações e 20 cartas por dia, 30 buscas, 20 criações/h, 20 convites/dia, 10 e-mails de teste/dia, 40 buscas de contatos/dia, leitura de CV por dia (`CV_DAILY_LIMIT`).
+- Limites por conta: os de IA são configurados no painel Admin · IA; 30 buscas, 20 criações/h, 20 convites/dia, 10 e-mails de teste/dia, 40 buscas de contatos/dia, leitura de CV por dia (`CV_DAILY_LIMIT`).
 - O container roda como `pwuser` (não-root).
 
 ## Onboarding e guias

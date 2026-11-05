@@ -1,9 +1,12 @@
 import "server-only";
 import Anthropic from "@anthropic-ai/sdk";
 import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
+import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
 import mammoth from "mammoth";
 import { CV_MAX_BYTES, CvError, cvConfigured } from "./cv";
+import { AiDisabledError, aiFeature, trackUsage } from "./ai-config";
+import type { AiFeature } from "./ai-shared";
 
 /*
  * Módulo Currículo: pontuação, sugestões por seção, compatibilidade com uma vaga e carta de apresentação.
@@ -11,13 +14,17 @@ import { CV_MAX_BYTES, CvError, cvConfigured } from "./cv";
  * do currículo para poder aceitar sugestões e adaptar a cada vaga. O arquivo original nunca é guardado.
  */
 
-const MODEL = process.env.AI_MODEL_RESUME || "claude-opus-5-5";
-// o fallback do servidor reexecuta a mesma chamada em outro modelo se a primeira recusar por política
-const BETAS: Anthropic.Beta.AnthropicBeta[] = ["server-side-fallback-2026-07-01"];
+// Modelo, liga/desliga e limites vêm do painel /admin (lib/ai-config.ts).
+// O fallback do servidor ("default") reexecuta a chamada em outro modelo se a primeira recusar por política;
+// vale para Opus e Sonnet 5.5 (o Haiku não tem fallback do servidor).
+const withFallback = (model: string) => model.startsWith("claude-opus") || model === "claude-sonnet-5-5";
+// Haiku aceita raciocínio desligado (menos tokens); Opus/Sonnet 5.5 rejeitam "disabled".
+const noThinking = (model: string) => (model.startsWith("claude-haiku") ? { thinking: { type: "disabled" as const } } : {});
 
 export { CV_MAX_BYTES, CvError, cvConfigured as resumeConfigured };
 
 import { SUBSCORES, type JobFit, type ResumeAnalysis } from "./resume-shared";
+
 export * from "./resume-shared";
 
 /* ---------- schemas para a saída estruturada ---------- */
@@ -26,6 +33,7 @@ const AnalysisOut = z.object({
   is_cv: z.boolean(),
   text: z.string(),
   role: z.string(),
+  profile: z.string(),
   score: z.number(),
   label: z.string(),
   summary: z.string(),
@@ -65,6 +73,7 @@ Se o documento NÃO for um currículo, devolva is_cv=false, textos vazios, núme
 Se for um currículo:
 - text: transcreva o currículo inteiro em texto simples, fiel ao original (mesmas palavras), uma seção por bloco, títulos de seção em linhas próprias e cada item de lista começando com "- ". Esse texto será editado aceitando suas sugestões, então os trechos "original" das sugestões precisam existir nele exatamente.
 - role: cargo atual ou mais recente.
+- profile: perfil compacto em até 60 palavras, só fatos do currículo: cargo e senioridade, anos de experiência, setores, principais habilidades e ferramentas, idiomas e cidade.
 - score: nota de 0 a 100 do currículo como um todo (seja exigente: 90+ é raro). label: "Fraco", "Regular", "Bom", "Muito bom" ou "Excelente".
 - summary: 1 ou 2 frases com o diagnóstico geral.
 - subscores: as cinco chaves (coverage = abrangência do que deveria estar lá; structure = organização e seções; clarity = escrita objetiva; impact = resultados e números; ats = facilidade de leitura por sistemas e palavras-chave), cada uma com nota 0-100 e um comentário curto.
@@ -89,27 +98,37 @@ Escreva em primeira pessoa, como a própria pessoa candidata, com 3 parágrafos 
 let client: Anthropic | null = null;
 const ai = () => (client ??= new Anthropic({ timeout: 120_000, maxRetries: 1 }));
 
-async function call<S extends z.ZodType>(system: string, content: Anthropic.Beta.BetaContentBlockParam[], schema: S, effort: "low" | "medium" | "high"): Promise<z.infer<S>> {
-  if (!cvConfigured()) throw new CvError("A IA ainda não está configurada no servidor (ANTHROPIC_API_KEY).", 503);
+/** Erro de recurso desligado vira CvError (status 403) para as rotas e telas mostrarem a mensagem. */
+async function feature(key: AiFeature) {
+  try { return await aiFeature(key); } catch (e) { if (e instanceof AiDisabledError) throw new CvError(e.message, 403); throw e; }
+}
+
+async function call<S extends z.ZodType>(key: AiFeature, system: string, content: Anthropic.Beta.BetaContentBlockParam[], schema: S, effort: "low" | "medium" | "high"): Promise<z.infer<S>> {
+  const { model } = await feature(key);
+  let usage: Anthropic.Beta.BetaUsage | null = null;
   try {
     const res = await ai().beta.messages.parse({
-      model: MODEL,
+      model,
       max_tokens: 16000,
-      betas: BETAS,
-      fallbacks: "default",
+      ...(withFallback(model) ? { betas: ["server-side-fallback-2026-07-01"] as Anthropic.Beta.AnthropicBeta[], fallbacks: "default" as const } : {}),
+      ...noThinking(model),
       system,
       messages: [{ role: "user", content }],
       output_config: { format: betaZodOutputFormat(schema), effort },
     });
+    usage = res.usage;
     if (res.stop_reason === "refusal") throw new CvError("A IA recusou processar esse conteúdo.", 422);
     if (res.stop_reason === "max_tokens") throw new CvError("O currículo é longo demais para analisar de uma vez.", 422);
     if (!res.parsed_output) throw new CvError("Não consegui interpretar a resposta da IA.", 502);
+    trackUsage(key, model, usage);
     return res.parsed_output as z.infer<S>;
   } catch (e) {
+    trackUsage(key, model, usage, true);
     if (e instanceof CvError) throw e;
     if (e instanceof Anthropic.AuthenticationError) throw new CvError("A chave da Anthropic é inválida (ANTHROPIC_API_KEY).", 503);
     if (e instanceof Anthropic.RateLimitError) throw new CvError("Muitos pedidos à IA agora. Tente de novo em instantes.", 429);
     if (e instanceof Anthropic.APIError) throw new CvError(`Falha ao falar com a IA (${e.status}).`, 502);
+    console.error("[ai]", e instanceof Error ? e.message : e);
     throw new CvError("Não consegui falar com a IA agora.", 502);
   }
 }
@@ -147,7 +166,7 @@ const sid = (i: number) => `s${Date.now().toString(36)}${i}`;
 
 /** Analisa um currículo (arquivo novo ou o texto já guardado). Devolve o texto normalizado e a análise. */
 export async function analyzeResume(content: Anthropic.Beta.BetaContentBlockParam[]): Promise<{ text: string; analysis: ResumeAnalysis }> {
-  const o = await call(ANALYZE, content, AnalysisOut, "medium");
+  const o = await call("resume", ANALYZE, content, AnalysisOut, "medium");
   if (!o.is_cv || o.text.trim().length < 80) throw new CvError("Esse arquivo não parece um currículo.");
   const text = o.text.trim().slice(0, 60_000);
   const byKey = new Map(o.subscores.map((s) => [s.key, s]));
@@ -161,6 +180,7 @@ export async function analyzeResume(content: Anthropic.Beta.BetaContentBlockPara
       strengths: clean(o.strengths, 4, 200),
       keywords: clean(o.keywords, 12, 40),
       role: o.role.trim().slice(0, 80),
+      profile: o.profile.trim().slice(0, 600),
       suggestions: o.suggestions.slice(0, 10).map((s, i) => ({
         id: sid(i),
         section: s.section.trim().slice(0, 40) || "Geral",
@@ -182,7 +202,7 @@ type JobInput = { title: string; company: string; location: string | null; descr
 const jobBlock = (j: JobInput) => `VAGA: ${j.title} — ${j.company}${j.location ? ` (${j.location})` : ""}\n\n${j.description.slice(0, 20_000)}`;
 
 export async function fitJob(resumeText: string, job: JobInput): Promise<JobFit> {
-  const o = await call(FIT, [{ type: "text", text: `CURRÍCULO:\n\n${resumeText}\n\n---\n\n${jobBlock(job)}` }], FitOut, "medium");
+  const o = await call("fit", FIT, [{ type: "text", text: `CURRÍCULO:\n\n${resumeText}\n\n---\n\n${jobBlock(job)}` }], FitOut, "medium");
   return {
     score: clamp(o.score),
     verdict: o.verdict.trim().slice(0, 300),
@@ -195,8 +215,61 @@ export async function fitJob(resumeText: string, job: JobInput): Promise<JobFit>
 }
 
 export async function coverLetter(resumeText: string, job: JobInput): Promise<string> {
-  const o = await call(LETTER, [{ type: "text", text: `CURRÍCULO:\n\n${resumeText}\n\n---\n\n${jobBlock(job)}` }], LetterOut, "medium");
+  const o = await call("letter", LETTER, [{ type: "text", text: `CURRÍCULO:\n\n${resumeText}\n\n---\n\n${jobBlock(job)}` }], LetterOut, "medium");
   const letter = o.letter.trim();
   if (letter.length < 200) throw new CvError("Não consegui escrever a carta agora.", 502);
   return letter.slice(0, 4000);
+}
+
+/* ---------- checagem rápida (vagas novas e verificação em massa): o mínimo de tokens ---------- */
+
+// Modelo barato, sem raciocínio, esforço baixo, várias vagas por chamada, perfil compacto e resposta curta.
+export const QUICK_BATCH = 10;
+
+const QuickOut = z.object({
+  results: z.array(z.object({ n: z.number(), score: z.number(), ok: z.array(z.string()), miss: z.array(z.string()) })),
+});
+
+const QUICK = `Dê a compatibilidade (0-100) do candidato com cada vaga, como um recrutador realista: requisitos centrais pesam mais. Para cada vaga n: score, ok (até 3 requisitos atendidos, 1-3 palavras cada) e miss (até 3 que faltam, 1-3 palavras cada). Sem explicações.`;
+
+/** Perfil curto do currículo para a checagem rápida (análises antigas não têm `profile`: monta com o que houver). */
+export function compactProfile(a: ResumeAnalysis) {
+  if (a.profile) return a.profile;
+  return [a.role, a.summary, a.keywords.join(", "), a.strengths.join("; ")].filter(Boolean).join(". ").slice(0, 600);
+}
+
+type QuickJob = { title: string; company: string; location: string | null; text: string };
+
+/** Pontua até QUICK_BATCH vagas numa chamada só. Devolve a nota de cada uma, na mesma ordem. */
+export async function quickFitBatch(profile: string, jobs: QuickJob[], key: "quickfit" | "autofit" = "quickfit"): Promise<JobFit[]> {
+  const { model } = await feature(key);
+  let usage: Anthropic.Usage | null = null;
+  const list = jobs.slice(0, QUICK_BATCH).map((j, i) =>
+    `${i + 1}. ${j.title} | ${j.company}${j.location ? ` | ${j.location}` : ""}\n${j.text.replace(/\s+/g, " ").slice(0, 900)}`).join("\n\n");
+  try {
+    const res = await ai().messages.parse({
+      model,
+      max_tokens: 1500,
+      ...noThinking(model),
+      system: QUICK,
+      messages: [{ role: "user", content: `CANDIDATO: ${profile}\n\nVAGAS:\n${list}` }],
+      output_config: { format: zodOutputFormat(QuickOut), effort: "low" },
+    });
+    usage = res.usage;
+    trackUsage(key, model, usage, res.stop_reason === "refusal");
+    if (res.stop_reason === "refusal") throw new CvError("A IA recusou processar esse conteúdo.", 422);
+    const out = res.parsed_output?.results ?? [];
+    return jobs.slice(0, QUICK_BATCH).map((_, i) => {
+      const r = out.find((x) => Math.round(x.n) === i + 1);
+      if (!r) throw new CvError("Resposta incompleta da IA.", 502);
+      return { score: clamp(r.score), verdict: "", matched: clean(r.ok, 3, 40), missing: clean(r.miss, 3, 40), tips: [], summary: "", bullets: [], quick: true };
+    });
+  } catch (e) {
+    if (!usage) trackUsage(key, model, null, true);
+    if (e instanceof CvError) throw e;
+    if (e instanceof Anthropic.RateLimitError) throw new CvError("Muitos pedidos à IA agora. Tente de novo em instantes.", 429);
+    if (e instanceof Anthropic.APIError) throw new CvError(`Falha ao falar com a IA (${e.status}).`, 502);
+    console.error("[ai]", e instanceof Error ? e.message : e);
+    throw new CvError("Não consegui falar com a IA agora.", 502);
+  }
 }

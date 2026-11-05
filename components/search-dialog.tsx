@@ -10,6 +10,7 @@ import { emptySpec, hasTerms, parseSpec, specToBoolean, specToQuery } from "@/li
 import { QueryBuilder } from "./query-builder";
 import { EmailSettings } from "./email-settings";
 import { CvFill } from "./cv-fill";
+import { useAiFlags } from "./ai-flags";
 import { HelpButton, ModuleTip } from "./guide";
 import type { Search } from "@/lib/types";
 
@@ -20,6 +21,7 @@ export function SearchDialog({ open, onClose, initial }: { open: boolean; onClos
 
 function DialogBody({ onClose, initial }: { onClose: () => void; initial?: Search | null }) {
   const router = useRouter();
+  const flags = useAiFlags();
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [before, setBefore] = useState<SearchInput | null>(null); // para "Desfazer" o preenchimento pelo CV
@@ -74,12 +76,14 @@ function DialogBody({ onClose, initial }: { onClose: () => void; initial?: Searc
         <h2 className="font-display mt-1 pr-20 text-3xl sm:text-4xl">{initial ? "Ajuste o radar" : "O que você procura?"}</h2>
         <ModuleTip id="search" className="mt-5" />
 
-        <CvFill
-          canUndo={before !== null}
-          onUndo={() => { if (before) setF(before); setBefore(null); }}
-          onApply={(sug) => { setBefore((b) => b ?? f); setF((p) => ({ ...p, name: sug.name, spec: sug.spec, location: sug.location, recency: sug.recency })); }}
-          onCreated={() => router.refresh()}
-        />
+        {flags.cv_fill && (
+          <CvFill
+            canUndo={before !== null}
+            onUndo={() => { if (before) setF(before); setBefore(null); }}
+            onApply={(sug) => { setBefore((b) => b ?? f); setF((p) => ({ ...p, name: sug.name, spec: sug.spec, location: sug.location, recency: sug.recency })); }}
+            onCreated={() => router.refresh()}
+          />
+        )}
 
         <label className="mt-6 block">
           <span className="mb-2 block text-sm font-medium">Nome da busca <span className="text-ink-3">(opcional)</span></span>

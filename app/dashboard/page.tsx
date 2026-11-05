@@ -1,9 +1,11 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { getUserId, getViewer } from "@/lib/auth";
+import { getUserId, getViewer, isAdminViewer } from "@/lib/auth";
+import { aiFlags } from "@/lib/ai-config";
+import { AiFlagsProvider } from "@/components/ai-flags";
 import { UserButton } from "@clerk/nextjs";
 import { AlertTriangle, Columns3, LayoutList, Radar as RadarIcon, Star } from "lucide-react";
-import { boardCounts, filteredCount, getJob, getJobFit, getKv, getResume, getSeenGuides, pendingInvitesFor, jobCounts, listContacts, listJobs, listRuns, listSearches, type JobFilter } from "@/lib/db";
+import { type FitFilter, boardCounts, filteredCount, getJob, getJobFit, getKv, getResume, getSeenGuides, pendingInvitesFor, jobCounts, listContacts, listJobs, listRuns, listSearches, type JobFilter } from "@/lib/db";
 import { isDemoMode } from "@/lib/serp";
 import { freqLabel, sourceLabel } from "@/lib/sources";
 import { includeTerms, parseSpec, specToBoolean } from "@/lib/query";
@@ -29,19 +31,21 @@ export default async function Dashboard({ searchParams }: PageProps<"/dashboard"
   const sp = await searchParams;
   const one = (k: string) => (typeof sp[k] === "string" ? (sp[k] as string) : null);
 
-  const [searches, counts, viewer, seenGuides] = await Promise.all([listSearches(userId), jobCounts(userId), getViewer(), getSeenGuides(userId)]);
+  const [searches, counts, viewer, seenGuides, flags] = await Promise.all([listSearches(userId), jobCounts(userId), getViewer(), getSeenGuides(userId), aiFlags()]);
   const invites = await pendingInvitesFor(viewer?.emails ?? []);
   const current = searches.find((s) => s.id === one("s")) ?? null;
   const view = one("v") === "board" ? "board" : "list";
   const filter: JobFilter = view === "board" ? "board" : one("f") === "new" ? "new" : one("f") === "fav" ? "fav" : one("f") === "filtered" ? "filtered" : "all";
-  const [jobs, nFiltered] = await Promise.all([listJobs(userId, { searchId: current?.id, filter }), filteredCount(userId, current?.id ?? null)]);
+  // compatibilidade: ordenar (o=fit) e filtrar por faixa (c=top|good|none); só na lista
+  const sort = view === "list" && one("o") === "fit" ? "fit" : "recent";
+  const fitF = view === "list" && (["top", "good", "none"] as const).includes(one("c") as FitFilter) ? (one("c") as FitFilter) : null;
+  const [jobs, nFiltered, myResume] = await Promise.all([listJobs(userId, { searchId: current?.id, filter, sort, fit: fitF }), filteredCount(userId, current?.id ?? null), getResume(userId)]);
   const [beat, runs] = await Promise.all([getKv("scheduler_heartbeat"), current ? listRuns(current.id) : Promise.resolve([])]);
   const boardByS = view === "board" ? await boardCounts(userId) : ({} as Record<string, number>);
   const jobId = one("job");
   const drawerJob = jobId ? await getJob(userId, jobId) : null;
-  const [contacts, resume, fit] = drawerJob
-    ? await Promise.all([listContacts(drawerJob.id), getResume(userId), getJobFit(userId, drawerJob.id)])
-    : [[], null, null];
+  const resume = myResume;
+  const [contacts, fit] = drawerJob ? await Promise.all([listContacts(drawerJob.id), getJobFit(userId, drawerJob.id)]) : [[], null];
   const drawerSearch = drawerJob ? searches.find((s) => s.id === drawerJob.search_id) ?? null : null;
 
   const base = (extra: Record<string, string | null> = {}) => {
@@ -50,6 +54,10 @@ export default async function Dashboard({ searchParams }: PageProps<"/dashboard"
     if (view === "board") p.set("v", "board");
     const f = "f" in extra ? extra.f : filter === "all" || filter === "board" ? null : filter;
     if (f && view !== "board") p.set("f", f);
+    const o = "o" in extra ? extra.o : sort === "fit" ? "fit" : null;
+    const c = "c" in extra ? extra.c : fitF;
+    if (o && view !== "board") p.set("o", o);
+    if (c && view !== "board") p.set("c", c);
     if (extra.job) p.set("job", extra.job);
     const q = p.toString();
     return `/dashboard${q ? `?${q}` : ""}`;
@@ -74,10 +82,11 @@ export default async function Dashboard({ searchParams }: PageProps<"/dashboard"
   const editableIds = new Set(searches.filter((s) => s.is_owner !== false || canEdit(s.my_role)).map((s) => s.id));
 
   return (
+    <AiFlagsProvider flags={flags}>
     <OnboardingProvider seen={seenGuides} hasSearches={searches.length > 0}>
     <div className="relative z-10 flex min-h-dvh flex-col lg:flex-row">
       <AutoRefresh active={anyRunning} />
-      <Sidebar searches={searches} counts={counts} currentId={current?.id ?? null} filter={filter} view={view} robotOnline={isFresh(beat?.updated_at, 3 * 60_000)}>
+      <Sidebar searches={searches} counts={counts} currentId={current?.id ?? null} filter={filter} view={view} robotOnline={isFresh(beat?.updated_at, 3 * 60_000)} isAdmin={isAdminViewer(viewer)}>
         <UserButton />
         <div className="min-w-0 text-sm">
           <p className="truncate font-medium">{viewer?.firstName ?? viewer?.name ?? "Você"}</p>
@@ -149,8 +158,26 @@ export default async function Dashboard({ searchParams }: PageProps<"/dashboard"
             </div>
           ) : (
             <div className="mt-5 grid gap-3 sm:mt-6 sm:gap-4">
+              {(myResume || jobs.some((j) => j.fit_score != null) || sort === "fit" || fitF) && (
+                <div className="-mx-4 flex items-center gap-2 overflow-x-auto px-4 pb-1 text-sm [scrollbar-width:none] sm:mx-0 sm:flex-wrap sm:px-0 [&::-webkit-scrollbar]:hidden" aria-label="Compatibilidade com o currículo">
+                  <span className="shrink-0 text-xs text-ink-3">Ordenar</span>
+                  <div className="inline-flex shrink-0 rounded-full border border-line bg-surface p-0.5">
+                    {([["recent", "Mais recentes"], ["fit", "Mais compatíveis"]] as const).map(([k, l]) => (
+                      <Link key={k} href={base({ o: k === "fit" ? "fit" : null })} scroll={false} aria-current={sort === k}
+                        className={`rounded-full px-3 py-1.5 whitespace-nowrap transition ${sort === k ? "bg-ink text-bg" : "text-ink-3 hover:text-ink"}`}>{l}</Link>
+                    ))}
+                  </div>
+                  <span className="ml-1 shrink-0 text-xs text-ink-3">Compatibilidade</span>
+                  {([[null, "Todas"], ["top", "Top match (85+)"], ["good", "Boa ou mais (70+)"], ["none", "Sem nota"]] as const).map(([k, l]) => (
+                    <Link key={l} href={base({ c: k })} scroll={false} aria-current={fitF === k}
+                      className={`shrink-0 rounded-full border px-3 py-1.5 whitespace-nowrap transition ${fitF === k ? "border-ok/50 bg-ok-soft font-medium text-ok" : "border-line bg-surface text-ink-3 hover:text-ink"}`}>{l}</Link>
+                  ))}
+                </div>
+              )}
               {jobs.map((j, i) => <JobCard key={j.id} job={j} index={i} showSearch={!current} canKeep={editableIds.has(j.search_id)} href={base({ job: j.id })} />)}
-              {jobs.length === 0 && <EmptyState hasSearches={searches.length > 0} current={!!current} filter={filter} running={current?.last_status === "running"} />}
+              {jobs.length === 0 && fitF ? (
+                <p className="rounded-[28px] border border-dashed border-line bg-surface/50 px-6 py-12 text-center text-ink-2">Nenhuma vaga nessa faixa de compatibilidade. <Link href={base({ c: null })} scroll={false} className="font-medium text-accent underline underline-offset-4">Ver todas</Link></p>
+              ) : jobs.length === 0 && <EmptyState hasSearches={searches.length > 0} current={!!current} filter={filter} running={current?.last_status === "running"} />}
             </div>
           )}
         </div>
@@ -159,6 +186,7 @@ export default async function Dashboard({ searchParams }: PageProps<"/dashboard"
       {drawerJob && <JobDrawer job={drawerJob} contacts={contacts} closeHref={base()} terms={drawerSearch ? includeTerms(parseSpec(drawerSearch.query_spec, drawerSearch.query)) : []} resumeAt={resume?.updated_at ?? null} fit={fit} />}
     </div>
     </OnboardingProvider>
+    </AiFlagsProvider>
   );
 }
 

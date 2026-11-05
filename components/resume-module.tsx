@@ -1,22 +1,22 @@
 "use client";
 
 import { useRef, useState, useTransition } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
-  ArrowRight, Check, ChevronDown, Download, FileText, Loader2, Pencil, Printer, RefreshCw, ShieldCheck, Sparkles, Star, Trash2, Upload, X,
+  Check, ChevronDown, Download, FileText, Loader2, Pencil, Printer, RefreshCw, ShieldCheck, Sparkles, Star, Trash2, Upload, X,
 } from "lucide-react";
 import { acceptSuggestionAction, deleteResumeAction, dismissSuggestionAction, reanalyzeResumeAction, saveResumeTextAction } from "@/app/actions";
-import { SUBSCORES, fitLabel, type Resume, type ResumeSuggestion } from "@/lib/resume-shared";
-import type { FitListItem } from "@/lib/db";
+import { SUBSCORES, type Resume, type ResumeSuggestion } from "@/lib/resume-shared";
+import type { FitJobItem } from "@/lib/db";
+import { FitList } from "./fit-list";
 import { timeAgo } from "@/lib/format";
-import { sourceLabel } from "@/lib/sources";
 import { Bar, ScoreRing } from "./score-ring";
-import { Avatar } from "./avatar";
 import { ModuleTip } from "./guide";
 
-export function ResumeModule({ resume, fits, configured }: { resume: Resume | null; fits: FitListItem[]; configured: boolean }) {
-  return resume ? <Loaded resume={resume} fits={fits} configured={configured} /> : <Empty configured={configured} />;
+type Quota = { left: number; limit: number };
+
+export function ResumeModule({ resume, jobs, quota, configured }: { resume: Resume | null; jobs: FitJobItem[]; quota: Quota; configured: boolean }) {
+  return resume ? <Loaded resume={resume} jobs={jobs} quota={quota} configured={configured} /> : <Empty configured={configured} />;
 }
 
 /* ---------- envio ---------- */
@@ -96,7 +96,7 @@ function Empty({ configured }: { configured: boolean }) {
 
 /* ---------- com currículo ---------- */
 
-function Loaded({ resume, fits, configured }: { resume: Resume; fits: FitListItem[]; configured: boolean }) {
+function Loaded({ resume, jobs, quota, configured }: { resume: Resume; jobs: FitJobItem[]; quota: Quota; configured: boolean }) {
   const router = useRouter();
   const a = resume.analysis;
   const [pending, start] = useTransition();
@@ -234,30 +234,7 @@ function Loaded({ resume, fits, configured }: { resume: Resume; fits: FitListIte
 
       <ResumeText text={resume.text} />
 
-      {/* vagas mais compatíveis */}
-      <section className="anim-rise rounded-3xl border border-line bg-surface p-5 shadow-card sm:p-7">
-        <p className="text-[11px] font-semibold tracking-wider text-accent uppercase">Compatibilidade</p>
-        <h2 className="font-display mt-1 text-3xl">Vagas mais compatíveis</h2>
-        {fits.length === 0 ? (
-          <p className="mt-3 text-sm text-ink-2">Abra uma vaga e toque em <strong className="font-medium">Ver compatibilidade</strong>: as comparadas aparecem aqui, das mais compatíveis para as menos.</p>
-        ) : (
-          <ul className="mt-4 grid gap-2.5 md:grid-cols-2">
-            {fits.map((f) => (
-              <li key={f.job_id} className="min-w-0">
-                <Link href={`/dashboard?job=${f.job_id}`} scroll={false} className="flex items-center gap-3 rounded-2xl border border-line bg-bg/60 p-3 transition hover:border-ink-3/40 hover:bg-surface-2/60">
-                  <ScoreRing value={f.score} size={46} suffix="%" />
-                  <Avatar name={f.company} size={36} />
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm font-semibold">{f.title}</span>
-                    <span className="block truncate text-xs text-ink-3">{f.company} · {sourceLabel(f.source)} · {fitLabel(f.score).toLowerCase()}</span>
-                  </span>
-                  <ArrowRight className="size-4 shrink-0 text-ink-3" />
-                </Link>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+      <FitList jobs={jobs} resumeAt={resume.updated_at} quota={quota} autoFit={resume.auto_fit !== 0} />
     </div>
   );
 }

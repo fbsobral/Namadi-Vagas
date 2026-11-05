@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Menu, Plus, Star, Layers, X, Columns3, CircleHelp, FileText } from "lucide-react";
+import { Menu, Plus, Star, Layers, X, Columns3, CircleHelp, FileText, Settings2 } from "lucide-react";
 import { Logo } from "./logo";
 import { SearchDialog } from "./search-dialog";
 import { useGuides } from "./guide";
@@ -16,10 +16,11 @@ type Props = {
   filter: string;
   view?: "list" | "board" | "cv";
   robotOnline?: boolean;
+  isAdmin?: boolean;
   children: React.ReactNode; // UserButton
 };
 
-export function Sidebar({ searches, counts, currentId, filter, view = "list", robotOnline, children }: Props) {
+export function Sidebar({ searches, counts, currentId, filter, view = "list", robotOnline, isAdmin, children }: Props) {
   const [mobile, setMobile] = useState(false);
   const [dialog, setDialog] = useState(false);
   const guides = useGuides();
@@ -76,6 +77,14 @@ export function Sidebar({ searches, counts, currentId, filter, view = "list", ro
             <span className="flex-1 text-left">Ajuda e guias</span>
             {unseenGuides > 0 && <span className="rounded-full bg-accent-soft px-1.5 py-0.5 text-[11px] leading-none font-semibold text-accent">{unseenGuides}</span>}
           </button>
+        </div>
+      )}
+
+      {isAdmin && (
+        <div className="px-3 pb-2">
+          <Link href="/admin" onClick={() => setMobile(false)} className="flex min-h-11 items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-ink-2 transition hover:bg-surface/60 hover:text-ink">
+            <Settings2 className="size-4" /> <span className="flex-1">Admin · IA</span>
+          </Link>
         </div>
       )}
 

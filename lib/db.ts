@@ -162,6 +162,7 @@ CREATE TABLE IF NOT EXISTS resumes (
   updated_at BIGINT NOT NULL,
   analyzed_at BIGINT NOT NULL
 );
+ALTER TABLE resumes ADD COLUMN IF NOT EXISTS auto_fit INTEGER NOT NULL DEFAULT 1;
 
 -- compatibilidade currículo x vaga e carta de apresentação, por pessoa
 CREATE TABLE IF NOT EXISTS job_fit (
@@ -175,6 +176,18 @@ CREATE TABLE IF NOT EXISTS job_fit (
   PRIMARY KEY (job_id, user_id)
 );
 CREATE INDEX IF NOT EXISTS idx_job_fit_user ON job_fit(user_id, score DESC);
+
+-- consumo de IA por dia, recurso e modelo (painel /admin)
+CREATE TABLE IF NOT EXISTS ai_usage (
+  day TEXT NOT NULL,
+  feature TEXT NOT NULL,
+  model TEXT NOT NULL,
+  calls INTEGER NOT NULL DEFAULT 0,
+  errors INTEGER NOT NULL DEFAULT 0,
+  input_tokens BIGINT NOT NULL DEFAULT 0,
+  output_tokens BIGINT NOT NULL DEFAULT 0,
+  PRIMARY KEY (day, feature, model)
+);
 `;
 
 const g = globalThis as unknown as { __vagasPool?: Pool; __vagasReady?: Promise<void>; __vagasSchema?: string };
@@ -335,14 +348,24 @@ export const listRuns = (searchId: string, limit = 8) =>
 export const setKv = (key: string, value: string) =>
   run("INSERT INTO kv (key,value,updated_at) VALUES (?,?,?) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value, updated_at=EXCLUDED.updated_at", key, value, Date.now());
 /** Limite por usuário numa janela de tempo (contador no kv). Lança erro quando passa de `max`. */
-export async function rateLimit(name: string, userId: string, max: number, windowMs: number, msg: string) {
+export async function rateLimit(name: string, userId: string, max: number, windowMs: number, msg: string, amount = 1) {
   const key = `rl:${name}:${userId}:${Math.floor(Date.now() / windowMs)}`;
   const r = await get<{ n: number }>(
-    `INSERT INTO kv (key,value,updated_at) VALUES (?, '1', ?)
-     ON CONFLICT (key) DO UPDATE SET value=(kv.value::int+1)::text, updated_at=EXCLUDED.updated_at RETURNING value::int AS n`,
-    key, Date.now(),
+    `INSERT INTO kv (key,value,updated_at) VALUES (?, ?, ?)
+     ON CONFLICT (key) DO UPDATE SET value=(kv.value::int+?)::text, updated_at=EXCLUDED.updated_at RETURNING value::int AS n`,
+    key, String(amount), Date.now(), amount,
   );
-  if ((r?.n ?? 1) > max) throw new Error(msg);
+  if ((r?.n ?? amount) > max) {
+    // devolve o que não coube, para a conta não ficar inflada por uma tentativa recusada
+    await run("UPDATE kv SET value=(value::int-?)::text WHERE key=?", amount, key);
+    throw new Error(msg);
+  }
+}
+
+/** Quanto de um limite (rateLimit) já foi usado na janela atual. */
+export async function rateUsage(name: string, userId: string, windowMs: number) {
+  const r = await get<{ value: string }>("SELECT value FROM kv WHERE key=?", `rl:${name}:${userId}:${Math.floor(Date.now() / windowMs)}`);
+  return Number(r?.value ?? 0);
 }
 
 export const getKv = (key: string) => get<{ value: string; updated_at: number }>("SELECT value, updated_at FROM kv WHERE key=?", key);
@@ -396,10 +419,12 @@ export type JobFilter = "all" | "new" | "fav" | "board" | "filtered";
 const PENDING_MS = 4 * 60_000; // busca de contatos 'pendente' há mais que isso é considerada travada
 const JOB_COLS = `j.*, (j.contacts_status = 'pending' AND COALESCE(j.contacts_at, 0) < ${Date.now() - PENDING_MS}) AS contacts_stale, s.name AS search_name, s.color AS search_color, (s.user_id = ?) AS is_owner,
        COALESCE(u.favorite, 0) AS favorite, u.favorited_at AS favorited_at, COALESCE(u.seen, 0) AS seen, u.stage AS stage, COALESCE(u.stage_pos, 0) AS stage_pos,
-       f.score AS fit_score`;
+       f.score AS fit_score, f.resume_at AS fit_resume_at`;
 const JOB_FROM = `FROM jobs j JOIN searches s ON s.id = j.search_id LEFT JOIN job_user u ON u.job_id = j.id AND u.user_id = ? LEFT JOIN job_fit f ON f.job_id = j.id AND f.user_id = ?`;
 
-export function listJobs(userId: string, opts: { searchId?: string | null; filter: JobFilter; limit?: number }) {
+export type FitFilter = "top" | "good" | "none";
+
+export function listJobs(userId: string, opts: { searchId?: string | null; filter: JobFilter; limit?: number; sort?: "recent" | "fit"; fit?: FitFilter | null }) {
   const where = [ACCESS];
   const params: P[] = [userId, userId, userId, userId, userId]; // is_owner, join u, join f, acesso(2)
   if (opts.searchId) { where.push("j.search_id = ?"); params.push(opts.searchId); }
@@ -407,7 +432,13 @@ export function listJobs(userId: string, opts: { searchId?: string | null; filte
   if (opts.filter === "new") where.push("COALESCE(u.seen, 0) = 0");
   if (opts.filter === "fav") where.push("u.favorite = 1");
   if (opts.filter === "board") where.push("u.stage IS NOT NULL");
-  const order = opts.filter === "fav" ? "u.favorited_at DESC" : opts.filter === "board" ? "u.stage_pos ASC, u.favorited_at DESC" : "j.found_at DESC, j.id DESC";
+  // compatibilidade com o currículo
+  if (opts.fit === "top") where.push("f.score >= 85");
+  if (opts.fit === "good") where.push("f.score >= 70");
+  if (opts.fit === "none") where.push("f.score IS NULL");
+  const order = opts.filter === "board" ? "u.stage_pos ASC, u.favorited_at DESC"
+    : opts.sort === "fit" ? "f.score DESC NULLS LAST, j.found_at DESC, j.id DESC"
+    : opts.filter === "fav" ? "u.favorited_at DESC" : "j.found_at DESC, j.id DESC";
   return all<Job>(`SELECT ${JOB_COLS} ${JOB_FROM} WHERE ${where.join(" AND ")} ORDER BY ${order} LIMIT ${Number(opts.limit ?? 120)}`, ...params);
 }
 
@@ -783,4 +814,49 @@ export const listFits = (userId: string, limit = 8) =>
      FROM job_fit f JOIN jobs j ON j.id = f.job_id JOIN searches s ON s.id = j.search_id
      WHERE f.user_id = ? AND f.score IS NOT NULL AND ${ACCESS} ORDER BY f.score DESC, f.updated_at DESC LIMIT ${Number(limit)}`,
     userId, userId, userId,
+  );
+
+export const setAutoFit = (userId: string, on: boolean) => run("UPDATE resumes SET auto_fit = ? WHERE user_id = ?", on ? 1 : 0, userId);
+
+/** Quem deve ter a compatibilidade calculada sozinha nas vagas novas desta busca: dona e convidados com currículo e automático ligado. */
+export async function autoFitUsers(searchId: string) {
+  const rows = await all<{ user_id: string }>(
+    `SELECT r.user_id FROM resumes r WHERE r.auto_fit = 1 AND (
+       r.user_id = (SELECT user_id FROM searches WHERE id = ?)
+       OR r.user_id IN (SELECT user_id FROM search_members WHERE search_id = ? AND status = 'accepted' AND user_id IS NOT NULL))`,
+    searchId, searchId,
+  );
+  return rows.map((r) => r.user_id);
+}
+
+export type FitJobItem = Pick<Job, "id" | "title" | "company" | "location" | "source" | "found_at" | "favorite" | "search_name" | "search_color" | "fit_score"> & { fit_resume_at: number | null };
+
+/** Todas as vagas visíveis (não filtradas) com a nota de compatibilidade, para a lista do módulo Currículo. */
+export async function listJobsForFit(userId: string, limit = 400): Promise<FitJobItem[]> {
+  const jobs = await listJobs(userId, { filter: "all", limit });
+  return jobs.map((j) => ({
+    id: j.id, title: j.title, company: j.company, location: j.location, source: j.source, found_at: j.found_at, favorite: j.favorite,
+    search_name: j.search_name, search_color: j.search_color, fit_score: j.fit_score ?? null, fit_resume_at: j.fit_resume_at ?? null,
+  }));
+}
+
+/* ---------- consumo de IA ---------- */
+
+const dayOf = (t = Date.now()) => new Date(t).toISOString().slice(0, 10);
+
+export const logAiUsage = (feature: string, model: string, input: number, output: number, error: boolean) =>
+  run(
+    `INSERT INTO ai_usage (day, feature, model, calls, errors, input_tokens, output_tokens) VALUES (?, ?, ?, 1, ?, ?, ?)
+     ON CONFLICT (day, feature, model) DO UPDATE SET calls = ai_usage.calls + 1, errors = ai_usage.errors + EXCLUDED.errors,
+       input_tokens = ai_usage.input_tokens + EXCLUDED.input_tokens, output_tokens = ai_usage.output_tokens + EXCLUDED.output_tokens`,
+    dayOf(), feature, model, error ? 1 : 0, Math.max(0, Math.round(input)), Math.max(0, Math.round(output)),
+  );
+
+export type AiUsageRow = { day: string; feature: string; model: string; calls: number; errors: number; input_tokens: number; output_tokens: number };
+
+/** Consumo dos últimos `days` dias (inclui hoje). */
+export const aiUsageSince = (days: number) =>
+  all<AiUsageRow>(
+    "SELECT day, feature, model, calls, errors, input_tokens::float8 AS input_tokens, output_tokens::float8 AS output_tokens FROM ai_usage WHERE day >= ? ORDER BY day DESC",
+    dayOf(Date.now() - (days - 1) * 86400_000),
   );

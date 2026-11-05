@@ -1,11 +1,11 @@
 import { getUserId } from "@/lib/auth";
 import { analyzeCv, CV_MAX_BYTES, CvError } from "@/lib/cv";
 import { getKv, setKv } from "@/lib/db";
+import { getAiConfig } from "@/lib/ai-config";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
 
-const DAILY_LIMIT = Number(process.env.CV_DAILY_LIMIT || 10);
 
 /** Lê um CV e devolve sugestões para preencher a busca. O arquivo é processado em memória e descartado. */
 export async function POST(req: Request) {
@@ -21,7 +21,8 @@ export async function POST(req: Request) {
   if (!(file instanceof File) || file.size === 0) return Response.json({ error: "Envie um arquivo." }, { status: 400 });
   if (file.size > CV_MAX_BYTES) return Response.json({ error: "O arquivo passa de 5 MB." }, { status: 413 });
 
-  // limite diário por usuário (cada leitura é uma chamada paga à IA)
+  // limite diário por usuário (cada leitura é uma chamada paga à IA); o valor vem do painel /admin
+  const DAILY_LIMIT = (await getAiConfig()).features.cv_fill.daily;
   const key = `cv:${userId}:${new Date().toISOString().slice(0, 10)}`;
   const used = Number((await getKv(key))?.value ?? 0);
   if (used >= DAILY_LIMIT) return Response.json({ error: `Limite de ${DAILY_LIMIT} leituras de CV por dia atingido. Tente amanhã.` }, { status: 429 });

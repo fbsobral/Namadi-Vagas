@@ -8,6 +8,7 @@ import { buildGoogleQuery } from "./sources";
 import { evaluateJob, parseSpec, type QuerySpec } from "./query";
 import { gupyFetch, linkedinDescription, linkedinFetch, type Found } from "./providers";
 import { notifyMembersRun, sendDigest } from "./notify";
+import { autoFitNewJobs } from "./resume-service";
 import type { Search } from "./types";
 
 const running = new Set<string>();
@@ -77,6 +78,7 @@ export async function runSearch(searchId: string): Promise<{ added: number; tota
   running.add(s.id);
   const startedAt = Date.now();
   let added = 0;
+  const newIds: string[] = [];
   let total = 0;
   let raw = 0;
   let error: string | null = null;
@@ -122,8 +124,9 @@ export async function runSearch(searchId: string): Promise<{ added: number; tota
         if (seen.has(j.url)) continue;
         seen.add(j.url);
         total++;
+        const id = randomUUID();
         const ok = await insertJob({
-          id: randomUUID(),
+          id,
           user_id: s.user_id,
           search_id: s.id,
           title: j.title,
@@ -135,7 +138,7 @@ export async function runSearch(searchId: string): Promise<{ added: number; tota
           description: j.description ?? null,
           filtered_reason: j.filteredReason ?? null,
         });
-        if (ok && !j.filteredReason) added++;
+        if (ok && !j.filteredReason) { added++; newIds.push(id); }
       }
     }
     note = parts.join(" · ");
@@ -146,6 +149,12 @@ export async function runSearch(searchId: string): Promise<{ added: number; tota
     // Regras "na descrição": lê o texto das vagas novas do LinkedIn e manda para "Filtradas" o que for barrado
     const enr = await enrichLinkedin(s.id, spec).catch(() => null);
     if (enr) note += ` · ${enr}`;
+
+    // Compatibilidade com o currículo: calculada em segundo plano para quem tem currículo (não atrasa a rodada)
+    if (newIds.length) {
+      const n = await autoFitNewJobs(s.id, newIds).catch(() => 0);
+      if (n) note += ` · compatibilidade para ${n} ${n === 1 ? "pessoa" : "pessoas"}`;
+    }
 
     // Resumo por e-mail: só se esta rodada trouxe vaga nova. Falha de e-mail não derruba a rodada.
     if (!error && added > 0) {

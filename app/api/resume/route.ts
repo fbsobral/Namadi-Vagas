@@ -1,11 +1,11 @@
 import { getUserId } from "@/lib/auth";
 import { analyzeResume, CV_MAX_BYTES, CvError, fileContent } from "@/lib/resume";
 import { rateLimit, saveResume } from "@/lib/db";
+import { getAiConfig } from "@/lib/ai-config";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 180;
 
-const DAILY = Number(process.env.RESUME_DAILY_LIMIT || 8);
 
 /** Envia um currículo para o módulo Currículo: a IA lê, pontua e o TEXTO fica guardado (o arquivo é descartado). */
 export async function POST(req: Request) {
@@ -20,6 +20,7 @@ export async function POST(req: Request) {
   if (file.size > CV_MAX_BYTES) return Response.json({ error: "O arquivo passa de 5 MB." }, { status: 413 });
 
   try {
+    const DAILY = (await getAiConfig()).features.resume.daily;
     await rateLimit("resume", userId, DAILY, 86400_000, `Limite de ${DAILY} análises de currículo por dia atingido. Tente amanhã.`);
     const content = await fileContent({ name: file.name, type: file.type, buffer: Buffer.from(await file.arrayBuffer()) });
     const { text, analysis } = await analyzeResume(content);

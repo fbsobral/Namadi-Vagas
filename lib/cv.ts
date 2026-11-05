@@ -4,9 +4,9 @@ import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
 import mammoth from "mammoth";
 import { cleanSpec, type QuerySpec } from "./query";
+import { AiDisabledError, aiFeature, trackUsage } from "./ai-config";
 
 export const CV_MAX_BYTES = 5 * 1024 * 1024;
-const MODEL = process.env.AI_MODEL_CV || "claude-sonnet-5-5";
 
 /* O CV é lido na hora e descartado: nada do arquivo nem do texto é gravado. */
 
@@ -84,7 +84,8 @@ function kind(name: string, mime: string): "pdf" | "docx" | "txt" | null {
 }
 
 export async function analyzeCv(file: { name: string; type: string; buffer: Buffer }): Promise<CvAnalysis> {
-  if (!cvConfigured()) throw new CvError("A leitura de CV ainda não está configurada no servidor (ANTHROPIC_API_KEY).", 503);
+  let model: string;
+  try { ({ model } = await aiFeature("cv_fill")); } catch (e) { if (e instanceof AiDisabledError) throw new CvError(e.message, 403); throw e; }
   const k = kind(file.name, file.type);
   if (!k) throw new CvError("Formato não suportado. Envie PDF, DOCX ou TXT.");
   if (file.buffer.length > CV_MAX_BYTES) throw new CvError("O arquivo passa de 5 MB.");
@@ -107,15 +108,19 @@ export async function analyzeCv(file: { name: string; type: string; buffer: Buff
   let parsed: z.infer<typeof Analysis> | null;
   try {
     const res = await client.messages.parse({
-      model: MODEL,
+      model,
       max_tokens: 12000,
+      // Haiku aceita raciocínio desligado; Opus/Sonnet 5.5 rejeitam "disabled"
+      ...(model.startsWith("claude-haiku") ? { thinking: { type: "disabled" as const } } : {}),
       system: SYSTEM,
       messages: [{ role: "user", content }],
       output_config: { format: zodOutputFormat(Analysis), effort: "medium" },
     });
+    trackUsage("cv_fill", model, res.usage, res.stop_reason === "refusal");
     if (res.stop_reason === "refusal") throw new CvError("O modelo recusou ler esse documento.");
     parsed = res.parsed_output;
   } catch (e) {
+    if (!(e instanceof CvError)) trackUsage("cv_fill", model, null, true);
     if (e instanceof CvError) throw e;
     if (e instanceof Anthropic.AuthenticationError) throw new CvError("A chave da Anthropic é inválida (ANTHROPIC_API_KEY).", 503);
     if (e instanceof Anthropic.RateLimitError) throw new CvError("Muitas leituras ao mesmo tempo. Tente de novo em instantes.", 429);
