@@ -1,0 +1,142 @@
+"use client";
+
+import { useState, useTransition } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { Check, Copy, FileText, Loader2, PenLine, RefreshCw, Sparkles, Star } from "lucide-react";
+import { coverLetterAction, jobFitAction } from "@/app/actions";
+import { fitLabel, type JobFitRow } from "@/lib/resume-shared";
+import { ScoreRing } from "./score-ring";
+
+/** "Seu currículo x esta vaga": compatibilidade, o que falta, currículo adaptado e carta de apresentação. */
+export function JobFit({ jobId, hasResume, resumeAt, initial }: { jobId: string; hasResume: boolean; resumeAt: number | null; initial: JobFitRow | null }) {
+  const router = useRouter();
+  const [row, setRow] = useState(initial);
+  const [letter, setLetter] = useState(initial?.letter ?? null);
+  const [err, setErr] = useState<string | null>(null);
+  const [busy, setBusy] = useState<"fit" | "letter" | null>(null);
+  const [, start] = useTransition();
+
+  const runFit = (force: boolean) => {
+    setErr(null); setBusy("fit");
+    start(async () => {
+      const r = await jobFitAction(jobId, force);
+      setBusy(null);
+      if (!r.ok) return setErr(r.error);
+      setRow(r.data);
+      router.refresh();
+    });
+  };
+  const runLetter = () => {
+    setErr(null); setBusy("letter");
+    start(async () => {
+      const r = await coverLetterAction(jobId);
+      setBusy(null);
+      if (!r.ok) return setErr(r.error);
+      setLetter(r.data);
+    });
+  };
+
+  const fit = row?.fit ?? null;
+  const stale = !!(fit && resumeAt && row && row.resume_at < resumeAt);
+
+  return (
+    <section className="border-t border-line px-5 py-6 sm:px-6">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h3 className="font-display text-3xl">Seu currículo x esta vaga</h3>
+          <p className="mt-1 text-sm text-ink-3">Compatibilidade, o que falta e o currículo adaptado, com IA.</p>
+        </div>
+        {fit && <button disabled={!!busy} onClick={() => runFit(true)} className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-line bg-surface px-3 py-1.5 text-[13px] font-medium transition hover:bg-surface-2 disabled:opacity-50"><RefreshCw className={`size-3.5 ${busy === "fit" ? "spin" : ""}`} /> Refazer</button>}
+      </div>
+
+      {!hasResume ? (
+        <div className="mt-5 rounded-2xl border border-dashed border-line bg-surface/60 p-5 text-center">
+          <span className="mx-auto mb-3 grid size-10 place-items-center rounded-full bg-accent-soft text-accent"><FileText className="size-5" /></span>
+          <p className="font-semibold">Envie seu currículo uma vez</p>
+          <p className="mx-auto mt-1 max-w-sm text-sm text-ink-3">Depois, cada vaga mostra a % de compatibilidade e gera uma carta de apresentação.</p>
+          <Link href="/dashboard/curriculo" className="mt-4 inline-flex min-h-10 items-center rounded-full bg-ink px-5 text-sm font-medium text-bg">Ir para Currículo</Link>
+        </div>
+      ) : !fit ? (
+        <button disabled={!!busy} onClick={() => runFit(false)}
+          className="mt-5 flex w-full items-center gap-4 rounded-2xl border border-accent/40 bg-accent-soft/60 p-4 text-left transition hover:bg-accent-soft disabled:opacity-70">
+          <span className="grid size-12 shrink-0 place-items-center rounded-full bg-accent text-accent-ink">{busy === "fit" ? <Loader2 className="spin size-5" /> : <Sparkles className="size-5" />}</span>
+          <span><span className="block font-semibold">{busy === "fit" ? "Comparando com a vaga…" : "Ver compatibilidade"}</span><span className="block text-sm text-ink-2">{busy === "fit" ? "Leva uns 20 segundos." : "Nota de 0 a 100, requisitos que você atende e os que faltam."}</span></span>
+        </button>
+      ) : (
+        <div className="anim-rise mt-5 space-y-5">
+          {stale && <p className="rounded-xl bg-accent-soft px-3 py-2 text-sm text-accent">Seu currículo mudou desde esta comparação. Toque em <strong>Refazer</strong> para atualizar.</p>}
+          <div className={`flex items-center gap-4 rounded-2xl border p-4 ${fit.score >= 85 ? "border-ok/40 bg-ok-soft/60" : "border-line bg-surface"}`}>
+            <ScoreRing value={fit.score} size={84} suffix="%" />
+            <div className="min-w-0">
+              {fit.score >= 85
+                ? <span className="inline-flex items-center gap-1 rounded-full bg-ok px-2.5 py-1 text-[11px] font-bold tracking-wide text-white uppercase"><Star className="size-3 fill-current" /> Top match</span>
+                : <p className="text-sm font-semibold">{fitLabel(fit.score)}</p>}
+              <p className="mt-1.5 text-sm text-ink-2">{fit.verdict}</p>
+            </div>
+          </div>
+
+          {fit.matched.length > 0 && <Chips title="Você atende" items={fit.matched} tone="ok" />}
+          {fit.missing.length > 0 && <Chips title="Falta ou não aparece no seu currículo" items={fit.missing} tone="miss" />}
+
+          {fit.tips.length > 0 && (
+            <div>
+              <p className="mb-2 text-sm font-semibold">Como adaptar para esta vaga</p>
+              <ul className="space-y-1.5 text-sm text-ink-2">{fit.tips.map((t) => <li key={t} className="flex gap-2"><Check className="mt-0.5 size-4 shrink-0 text-accent" />{t}</li>)}</ul>
+            </div>
+          )}
+
+          {(fit.summary || fit.bullets.length > 0) && (
+            <div className="rounded-2xl border border-line bg-surface p-4">
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <p className="text-sm font-semibold">Currículo adaptado</p>
+                <CopyBtn text={[fit.summary, ...fit.bullets.map((b) => `- ${b}`)].filter(Boolean).join("\n\n")} />
+              </div>
+              {fit.summary && <p className="text-sm whitespace-pre-line text-ink-2">{fit.summary}</p>}
+              {fit.bullets.length > 0 && <ul className="mt-3 space-y-1.5 text-sm text-ink-2">{fit.bullets.map((b) => <li key={b} className="flex gap-2"><span className="mt-2 size-1.5 shrink-0 rounded-full bg-accent" />{b}</li>)}</ul>}
+            </div>
+          )}
+
+          <div className="rounded-2xl border border-line bg-surface p-4">
+            <div className="flex items-center justify-between gap-2">
+              <p className="flex items-center gap-2 text-sm font-semibold"><PenLine className="size-4 text-accent" /> Carta de apresentação</p>
+              {letter && <CopyBtn text={letter} />}
+            </div>
+            {letter ? (
+              <>
+                <p className="mt-3 text-sm leading-relaxed whitespace-pre-line text-ink-2">{letter}</p>
+                <button disabled={!!busy} onClick={runLetter} className="mt-3 inline-flex items-center gap-1.5 text-sm font-medium text-ink-3 hover:text-ink disabled:opacity-50"><RefreshCw className={`size-3.5 ${busy === "letter" ? "spin" : ""}`} /> Escrever outra</button>
+              </>
+            ) : (
+              <button disabled={!!busy} onClick={runLetter} className="mt-3 inline-flex min-h-10 items-center gap-2 rounded-full bg-ink px-4 text-sm font-medium text-bg disabled:opacity-60">
+                {busy === "letter" ? <><Loader2 className="spin size-4" /> Escrevendo…</> : <><Sparkles className="size-4" /> Gerar carta</>}
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+      {err && <p role="alert" className="mt-4 rounded-xl bg-accent-soft px-3 py-2 text-sm text-accent">{err}</p>}
+    </section>
+  );
+}
+
+function Chips({ title, items, tone }: { title: string; items: string[]; tone: "ok" | "miss" }) {
+  return (
+    <div>
+      <p className="mb-2 text-sm font-semibold">{title}</p>
+      <div className="flex flex-wrap gap-1.5">
+        {items.map((t) => <span key={t} className={`rounded-full px-2.5 py-1 text-xs font-medium ${tone === "ok" ? "bg-ok-soft text-ok" : "border border-accent/40 bg-accent-soft/60 text-accent"}`}>{tone === "ok" ? "✓ " : "+ "}{t}</span>)}
+      </div>
+    </div>
+  );
+}
+
+function CopyBtn({ text }: { text: string }) {
+  const [ok, setOk] = useState(false);
+  return (
+    <button onClick={async () => { await navigator.clipboard.writeText(text); setOk(true); setTimeout(() => setOk(false), 1800); }}
+      className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-line px-3 py-1.5 text-xs font-medium transition hover:bg-surface-2">
+      {ok ? <><Check className="size-3.5 text-ok" /> Copiado</> : <><Copy className="size-3.5" /> Copiar</>}
+    </button>
+  );
+}

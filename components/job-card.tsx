@@ -34,6 +34,9 @@ export function JobCard({ job, href, showSearch, index, canKeep }: { job: Job; h
                   <span className="size-1.5 rounded-full" style={{ background: job.search_color }} />{job.search_name}
                 </span>
               )}
+              {job.fit_score != null && (
+                <span className={`rounded-full px-2.5 py-1 font-semibold ${job.fit_score >= 85 ? "bg-ok text-white" : job.fit_score >= 70 ? "bg-ok-soft text-ok" : "bg-surface-2 text-ink-2"}`}>{job.fit_score}% compatível</span>
+              )}
               <span>encontrada {timeAgo(job.found_at)}</span>
               {job.filtered === 1 && job.filtered_reason && <span className="text-accent">filtrada: {job.filtered_reason}</span>}
               {job.favorite === 1 && job.contacts_status === "pending" && !job.contacts_stale && <span className="text-accent">buscando pessoas…</span>}

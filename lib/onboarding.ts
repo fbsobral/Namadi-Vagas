@@ -2,12 +2,13 @@
 // "welcome" é o tour geral para quem chega; os demais explicam cada módulo na primeira visita
 // e podem ser revistos a qualquer momento pelo botão "?" ou pela central de ajuda.
 
-export type GuideId = "welcome" | "search" | "list" | "job" | "board" | "share" | "shared";
+export type GuideId = "welcome" | "search" | "list" | "job" | "board" | "share" | "shared" | "resume";
 
 export type VisualKey =
   | "radar" | "searchForm" | "robot" | "favContacts" | "kanban" | "emailShare" | "phone" | "cv" | "groups" | "exclude" | "sources"
   | "emailPreview" | "tabs" | "newBadge" | "toolbar" | "jobDetail" | "contactGroups" | "message" | "kanbanMove" | "boardFilter"
-  | "invite" | "members" | "owner" | "sharedBanner" | "notifySelect" | "leave";
+  | "invite" | "members" | "owner" | "sharedBanner" | "notifySelect" | "leave"
+  | "resumeScore" | "resumeChat" | "resumeFit" | "resumeLetter";
 
 export type GuideStep = {
   icon: IconKey;
@@ -24,7 +25,7 @@ export type Guide = { id: GuideId; label: string; summary: string; icon: IconKey
 
 export type IconKey =
   | "radar" | "search" | "bot" | "star" | "users" | "kanban" | "mail" | "share" | "sparkles" | "filter"
-  | "list" | "phone" | "clock" | "eye" | "copy" | "move" | "help" | "check" | "logout";
+  | "list" | "phone" | "clock" | "eye" | "copy" | "move" | "help" | "check" | "logout" | "file";
 
 export const GUIDES: Record<GuideId, Guide> = {
   welcome: {
@@ -71,6 +72,12 @@ export const GUIDES: Record<GuideId, Guide> = {
         visual: "emailShare",
         title: "5. Receba por e-mail e divida a busca",
         body: "Ligue o resumo a cada rodada ou diário às 8h. E compartilhe uma busca com quem também está procurando: cada pessoa tem suas favoritas e seu Kanban.",
+      },
+      {
+        icon: "file",
+        visual: "resumeScore",
+        title: "6. Seu currículo com IA",
+        body: "Na área Currículo, envie o seu e receba uma nota de 0 a 100 e sugestões seção por seção. Depois, cada vaga mostra a % de compatibilidade e gera carta de apresentação.",
       },
       {
         icon: "phone",
@@ -249,6 +256,43 @@ export const GUIDES: Record<GuideId, Guide> = {
     ],
   },
 
+  resume: {
+    id: "resume",
+    label: "Currículo com IA",
+    summary: "Nota, sugestões, compatibilidade com vagas e carta",
+    icon: "file",
+    steps: [
+      {
+        icon: "file",
+        visual: "resumeScore",
+        title: "Uma nota para o seu currículo",
+        body: "Envie PDF, DOCX ou TXT. A IA dá uma nota de 0 a 100 e mostra onde você vai bem e onde perde pontos: abrangência, estrutura, clareza, impacto e leitura por ATS.",
+        bullets: ["Guardamos só o texto, nunca o arquivo", "“Apagar” remove o currículo e todas as análises"],
+      },
+      {
+        icon: "sparkles",
+        visual: "resumeChat",
+        title: "Um especialista ao seu lado",
+        body: "Cada sugestão mostra o trecho atual e uma versão melhor. Aceite, edite antes de aplicar ou ignore. Depois, “Reanalisar” mostra a nova nota.",
+        bullets: ["A IA não inventa experiência: quando falta um número, ela marca [X%] para você completar"],
+      },
+      {
+        icon: "star",
+        visual: "resumeFit",
+        title: "Compatibilidade com cada vaga",
+        body: "Abra uma vaga e toque em “Ver compatibilidade”: a % de match, os requisitos que você atende, os que faltam e um resumo do currículo reescrito para aquela vaga.",
+        bullets: ["A % aparece também no cartão da vaga", "As mais compatíveis ficam listadas na área Currículo"],
+      },
+      {
+        icon: "copy",
+        visual: "resumeLetter",
+        title: "Carta de apresentação pronta",
+        body: "Na mesma vaga, “Gerar carta” escreve uma carta curta a partir do seu currículo e dos requisitos. Copie, ajuste e envie.",
+        mobile: "No celular, “Imprimir / PDF” na área Currículo salva a versão atual como PDF.",
+      },
+    ],
+  },
+
   shared: {
     id: "shared",
     label: "Busca compartilhada comigo",
@@ -284,6 +328,6 @@ export const GUIDES: Record<GuideId, Guide> = {
   },
 };
 
-export const MODULE_GUIDES: GuideId[] = ["search", "list", "job", "board", "share", "shared"];
+export const MODULE_GUIDES: GuideId[] = ["search", "list", "job", "board", "resume", "share", "shared"];
 
 export const isGuideId = (s: unknown): s is GuideId => typeof s === "string" && s in GUIDES;

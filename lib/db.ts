@@ -4,6 +4,7 @@ import { Pool, types } from "pg";
 import { safeUrl } from "./safe-url";
 import { isMemberRole, type MemberRole, type Role } from "./roles";
 import type { Contact, Job, Search } from "./types";
+import type { JobFit, JobFitRow, Resume, ResumeAnalysis } from "./resume-shared";
 
 // BIGINT (timestamps em ms) e COUNT() voltam como número em vez de string.
 types.setTypeParser(20, (v) => Number(v));
@@ -150,6 +151,30 @@ CREATE TABLE IF NOT EXISTS runs (
 ALTER TABLE runs ADD COLUMN IF NOT EXISTS raw_count INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE runs ADD COLUMN IF NOT EXISTS note TEXT;
 CREATE INDEX IF NOT EXISTS idx_runs_search ON runs(search_id, started_at DESC);
+
+-- módulo Currículo: o TEXTO do currículo (nunca o arquivo), guardado por escolha da pessoa; apagar remove tudo
+CREATE TABLE IF NOT EXISTS resumes (
+  user_id TEXT PRIMARY KEY,
+  file_name TEXT NOT NULL DEFAULT '',
+  text TEXT NOT NULL,
+  analysis TEXT NOT NULL,
+  created_at BIGINT NOT NULL,
+  updated_at BIGINT NOT NULL,
+  analyzed_at BIGINT NOT NULL
+);
+
+-- compatibilidade currículo x vaga e carta de apresentação, por pessoa
+CREATE TABLE IF NOT EXISTS job_fit (
+  job_id TEXT NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL,
+  score INTEGER,
+  fit TEXT,
+  letter TEXT,
+  resume_at BIGINT NOT NULL,
+  updated_at BIGINT NOT NULL,
+  PRIMARY KEY (job_id, user_id)
+);
+CREATE INDEX IF NOT EXISTS idx_job_fit_user ON job_fit(user_id, score DESC);
 `;
 
 const g = globalThis as unknown as { __vagasPool?: Pool; __vagasReady?: Promise<void>; __vagasSchema?: string };
@@ -370,12 +395,13 @@ export type JobFilter = "all" | "new" | "fav" | "board" | "filtered";
 
 const PENDING_MS = 4 * 60_000; // busca de contatos 'pendente' há mais que isso é considerada travada
 const JOB_COLS = `j.*, (j.contacts_status = 'pending' AND COALESCE(j.contacts_at, 0) < ${Date.now() - PENDING_MS}) AS contacts_stale, s.name AS search_name, s.color AS search_color, (s.user_id = ?) AS is_owner,
-       COALESCE(u.favorite, 0) AS favorite, u.favorited_at AS favorited_at, COALESCE(u.seen, 0) AS seen, u.stage AS stage, COALESCE(u.stage_pos, 0) AS stage_pos`;
-const JOB_FROM = `FROM jobs j JOIN searches s ON s.id = j.search_id LEFT JOIN job_user u ON u.job_id = j.id AND u.user_id = ?`;
+       COALESCE(u.favorite, 0) AS favorite, u.favorited_at AS favorited_at, COALESCE(u.seen, 0) AS seen, u.stage AS stage, COALESCE(u.stage_pos, 0) AS stage_pos,
+       f.score AS fit_score`;
+const JOB_FROM = `FROM jobs j JOIN searches s ON s.id = j.search_id LEFT JOIN job_user u ON u.job_id = j.id AND u.user_id = ? LEFT JOIN job_fit f ON f.job_id = j.id AND f.user_id = ?`;
 
 export function listJobs(userId: string, opts: { searchId?: string | null; filter: JobFilter; limit?: number }) {
   const where = [ACCESS];
-  const params: P[] = [userId, userId, userId, userId]; // is_owner, join, acesso(2)
+  const params: P[] = [userId, userId, userId, userId, userId]; // is_owner, join u, join f, acesso(2)
   if (opts.searchId) { where.push("j.search_id = ?"); params.push(opts.searchId); }
   where.push(opts.filter === "filtered" ? "j.filtered = 1" : "j.filtered = 0");
   if (opts.filter === "new") where.push("COALESCE(u.seen, 0) = 0");
@@ -408,7 +434,7 @@ export async function jobCounts(userId: string) {
 }
 
 export const getJob = (userId: string, id: string) =>
-  get<Job>(`SELECT ${JOB_COLS} ${JOB_FROM} WHERE j.id = ? AND ${ACCESS}`, userId, userId, id, userId, userId); // is_owner, join, id, acesso(2)
+  get<Job>(`SELECT ${JOB_COLS} ${JOB_FROM} WHERE j.id = ? AND ${ACCESS}`, userId, userId, userId, id, userId, userId); // is_owner, join u, join f, id, acesso(2)
 
 export const getJobById = (id: string) => get<Job>("SELECT * FROM jobs WHERE id=?", id);
 
@@ -702,3 +728,59 @@ export async function addSeenGuide(userId: string, id: string) {
 }
 
 export const resetSeenGuides = (userId: string) => setKv(`onb:${userId}`, "[]");
+
+/* ---------- currículo ---------- */
+
+type ResumeRow = Omit<Resume, "analysis"> & { analysis: string };
+const toResume = (r: ResumeRow | null): Resume | null => (r ? { ...r, analysis: JSON.parse(r.analysis) as ResumeAnalysis } : null);
+
+export const getResume = async (userId: string) => toResume(await get<ResumeRow>("SELECT * FROM resumes WHERE user_id = ?", userId));
+
+/** Nova análise (arquivo novo ou reanálise do texto atual). */
+export async function saveResume(userId: string, fileName: string, text: string, analysis: ResumeAnalysis) {
+  const now = Date.now();
+  await run(
+    `INSERT INTO resumes (user_id, file_name, text, analysis, created_at, updated_at, analyzed_at) VALUES (?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT (user_id) DO UPDATE SET file_name = EXCLUDED.file_name, text = EXCLUDED.text, analysis = EXCLUDED.analysis, updated_at = EXCLUDED.updated_at, analyzed_at = EXCLUDED.analyzed_at`,
+    userId, fileName, text, JSON.stringify(analysis), now, now, now,
+  );
+}
+
+/** Texto e sugestões editados (aceitar/ignorar sugestão, edição manual). Não muda a nota: ela é da última análise. */
+export const updateResumeText = (userId: string, text: string, analysis: ResumeAnalysis) =>
+  run("UPDATE resumes SET text = ?, analysis = ?, updated_at = ? WHERE user_id = ?", text, JSON.stringify(analysis), Date.now(), userId);
+
+export async function deleteResume(userId: string) {
+  await run("DELETE FROM job_fit WHERE user_id = ?", userId);
+  await run("DELETE FROM resumes WHERE user_id = ?", userId);
+}
+
+type FitRow = { job_id: string; score: number | null; fit: string | null; letter: string | null; resume_at: number; updated_at: number };
+const toFit = (r: FitRow | null): JobFitRow | null => (r ? { job_id: r.job_id, fit: r.fit ? (JSON.parse(r.fit) as JobFit) : null, letter: r.letter, resume_at: Number(r.resume_at), updated_at: Number(r.updated_at) } : null);
+
+export const getJobFit = async (userId: string, jobId: string) => toFit(await get<FitRow>("SELECT * FROM job_fit WHERE job_id = ? AND user_id = ?", jobId, userId));
+
+export const saveJobFit = (userId: string, jobId: string, fit: JobFit, resumeAt: number) =>
+  run(
+    `INSERT INTO job_fit (job_id, user_id, score, fit, resume_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)
+     ON CONFLICT (job_id, user_id) DO UPDATE SET score = EXCLUDED.score, fit = EXCLUDED.fit, resume_at = EXCLUDED.resume_at, updated_at = EXCLUDED.updated_at`,
+    jobId, userId, fit.score, JSON.stringify(fit), resumeAt, Date.now(),
+  );
+
+export const saveLetter = (userId: string, jobId: string, letter: string, resumeAt: number) =>
+  run(
+    `INSERT INTO job_fit (job_id, user_id, letter, resume_at, updated_at) VALUES (?, ?, ?, ?, ?)
+     ON CONFLICT (job_id, user_id) DO UPDATE SET letter = EXCLUDED.letter, updated_at = EXCLUDED.updated_at`,
+    jobId, userId, letter, resumeAt, Date.now(),
+  );
+
+export type FitListItem = { job_id: string; score: number; title: string; company: string; location: string | null; source: string; search_color: string; updated_at: number };
+
+/** Vagas já comparadas com o currículo, das mais compatíveis para as menos (só as que a pessoa ainda acessa). */
+export const listFits = (userId: string, limit = 8) =>
+  all<FitListItem>(
+    `SELECT f.job_id, f.score, j.title, j.company, j.location, j.source, s.color AS search_color, f.updated_at
+     FROM job_fit f JOIN jobs j ON j.id = f.job_id JOIN searches s ON s.id = j.search_id
+     WHERE f.user_id = ? AND f.score IS NOT NULL AND ${ACCESS} ORDER BY f.score DESC, f.updated_at DESC LIMIT ${Number(limit)}`,
+    userId, userId, userId,
+  );

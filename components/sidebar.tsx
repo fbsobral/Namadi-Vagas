@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Menu, Plus, Star, Layers, X, Columns3, CircleHelp } from "lucide-react";
+import { Menu, Plus, Star, Layers, X, Columns3, CircleHelp, FileText } from "lucide-react";
 import { Logo } from "./logo";
 import { SearchDialog } from "./search-dialog";
 import { useGuides } from "./guide";
@@ -14,7 +14,7 @@ type Props = {
   counts: { total: number; unseen: number; favs: number };
   currentId: string | null;
   filter: string;
-  view?: "list" | "board";
+  view?: "list" | "board" | "cv";
   robotOnline?: boolean;
   children: React.ReactNode; // UserButton
 };
@@ -23,12 +23,13 @@ export function Sidebar({ searches, counts, currentId, filter, view = "list", ro
   const [mobile, setMobile] = useState(false);
   const [dialog, setDialog] = useState(false);
   const guides = useGuides();
-  const unseenGuides = guides ? ["welcome", "search", "list", "job", "board", "share"].filter((g) => !guides.seen.has(g)).length : 0;
+  const unseenGuides = guides ? ["welcome", "search", "list", "job", "board", "share", "resume"].filter((g) => !guides.seen.has(g)).length : 0;
   const mine = searches.filter((s) => s.is_owner !== false);
   const shared = searches.filter((s) => s.is_owner === false);
   const allActive = !currentId && view === "list" && filter !== "fav";
   const favActive = !currentId && view === "list" && filter === "fav";
   const boardActive = !currentId && view === "board";
+  const cvActive = view === "cv";
 
   const nav = (
     <div className="flex h-full flex-col">
@@ -41,6 +42,7 @@ export function Sidebar({ searches, counts, currentId, filter, view = "list", ro
         <NavItem href="/dashboard" active={allActive} icon={<Layers className="size-4" />} label="Todas as vagas" badge={counts.unseen} />
         <NavItem href="/dashboard?v=board" active={boardActive} icon={<Columns3 className="size-4" />} label="Kanban" count={counts.favs} />
         <NavItem href="/dashboard?f=fav" active={favActive} icon={<Star className="size-4" />} label="Favoritas" count={counts.favs} />
+        <NavItem href="/dashboard/curriculo" active={cvActive} icon={<FileText className="size-4" />} label="Currículo" />
       </nav>
 
       <div className="mt-7 flex items-center justify-between px-5">
@@ -107,7 +109,7 @@ export function Sidebar({ searches, counts, currentId, filter, view = "list", ro
   );
 }
 
-function SearchLink({ s, active, view }: { s: Search; active: boolean; view: "list" | "board" }) {
+function SearchLink({ s, active, view }: { s: Search; active: boolean; view: "list" | "board" | "cv" }) {
   const running = s.last_status === "running";
   const sharedWithMe = s.is_owner === false;
   return (

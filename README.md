@@ -48,6 +48,16 @@ Defina `RESEND_API_KEY`, `MAIL_FROM` (domínio verificado no Resend) e `APP_URL`
 ## Compartilhar buscas
 No editor da busca (dono), **Compartilhar** convida por e-mail. A pessoa vê o convite no painel (ou pelo link `/convite/...`) e só consegue aceitar entrando com o mesmo e-mail verificado. Quem aceita vê as vagas da busca; **favoritos, etapas do Kanban e "visto" são individuais** (tabela `job_user`). Só o dono edita, pausa, roda, exclui e convida. **Cada convidado também recebe por e-mail as vagas novas** da busca (a cada rodada ou resumo diário às 8h; padrão: a cada rodada), com o seu próprio controle na barra da busca e o seu link de "parar de receber". Ao entrar, só recebe vagas encontradas dali em diante. O convidado pode sair a qualquer momento. Se o Resend estiver configurado, o convite também vai por e-mail.
 
+## Currículo com IA (`/dashboard/curriculo`)
+Envie o currículo (PDF, DOCX ou TXT, até 5 MB) e a IA devolve:
+- **Nota de 0 a 100** e subnotas (abrangência, estrutura, clareza, impacto, leitura por ATS), pontos fortes e palavras-chave.
+- **Sugestões seção por seção** (trecho atual → versão melhor). Aceitar troca o trecho no texto guardado; dá para editar antes ou ignorar. **Reanalisar** gera nova nota a partir do texto atual. O texto pode ser editado, baixado em .txt ou impresso/salvo em PDF.
+- **Em cada vaga** (detalhes da vaga): % de compatibilidade (Top match a partir de 85), requisitos atendidos e faltantes, dicas, resumo e destaques reescritos para a vaga e **carta de apresentação**. A % aparece no cartão da vaga, e as mais compatíveis ficam listadas no módulo.
+
+Aqui, por escolha da pessoa, **o texto do currículo fica guardado** (tabela `resumes`; o arquivo nunca). "Apagar" remove o texto, a análise e todas as comparações (`job_fit`). A IA é instruída a não inventar experiência: quando falta um dado, marca o lugar com colchetes, como [X%].
+
+Modelo: `claude-opus-5-5` (troque com `AI_MODEL_RESUME`), saída estruturada validada e fallback do servidor ativado (`fallbacks: "default"`) para o caso de recusa por política. Requer `ANTHROPIC_API_KEY`. Limites por conta: `RESUME_DAILY_LIMIT` análises/dia (padrão 8), 40 comparações/dia e 20 cartas/dia.
+
 ## Preencher a busca com o CV
 No formulário da busca, **Preencher com meu currículo** (PDF, DOCX ou TXT, até 5 MB): o Claude (`claude-sonnet-5-5`, saída estruturada validada) lê o CV e sugere nome, grupos de palavras (cargos em português e inglês, senioridade), exclusões, local e até 2 variações que o CV sustente. Tudo fica editável e nada é criado até você confirmar. **O CV não é guardado**: é lido na hora e descartado. Requer `ANTHROPIC_API_KEY`; limite diário por usuário em `CV_DAILY_LIMIT` (padrão 10).
 
@@ -57,7 +67,7 @@ No formulário da busca, **Preencher com meu currículo** (PDF, DOCX ou TXT, at�
 - Em produção use as chaves **Production** do Clerk e defina `EMAIL_SECRET` (aleatório, 32+ caracteres). Sem ele os links de cancelamento de e-mail falham, de propósito.
 - `/api/cron` fica fechado (404) enquanto `CRON_SECRET` não existir; com ele, só responde a `Authorization: Bearer <segredo>`.
 - Links de vagas e contatos só viram clicáveis se forem `http(s)`. Cabeçalhos de segurança (anti-clickjacking, nosniff, HSTS, Referrer/Permissions-Policy) vêm do `next.config.ts`.
-- Limites por conta: 30 buscas, 20 criações/h, 20 convites/dia, 10 e-mails de teste/dia, 40 buscas de contatos/dia, leitura de CV por dia (`CV_DAILY_LIMIT`).
+- Limites por conta: análises de currículo (`RESUME_DAILY_LIMIT`), 40 comparações e 20 cartas por dia, 30 buscas, 20 criações/h, 20 convites/dia, 10 e-mails de teste/dia, 40 buscas de contatos/dia, leitura de CV por dia (`CV_DAILY_LIMIT`).
 - O container roda como `pwuser` (não-root).
 
 ## Onboarding e guias

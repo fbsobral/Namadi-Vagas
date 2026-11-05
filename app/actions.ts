@@ -334,3 +334,108 @@ export async function resetGuides() {
   await q.resetSeenGuides(userId);
   refresh();
 }
+
+/* ---------- currículo ---------- */
+
+const RESUME_DAILY = Number(process.env.RESUME_DAILY_LIMIT || 8);
+
+async function myResume(userId: string) {
+  const r = await q.getResume(userId);
+  if (!r) throw new Error("Envie seu currículo primeiro, na área Currículo.");
+  return r;
+}
+
+/** Erros da IA viram mensagens legíveis no cliente (server actions escondem a mensagem de erros genéricos em produção). */
+async function friendly<T>(fn: () => Promise<T>): Promise<{ ok: true; data: T } | { ok: false; error: string }> {
+  try { return { ok: true, data: await fn() }; } catch (e) { return { ok: false, error: e instanceof Error ? e.message : "Algo deu errado." }; }
+}
+
+/** Aceita uma sugestão: troca o trecho original pelo texto sugerido (ou acrescenta, quando não há trecho). */
+export async function acceptSuggestionAction(id: string, edited?: string) {
+  const userId = await uid();
+  const r = await myResume(userId);
+  const s = r.analysis.suggestions.find((x) => x.id === id);
+  if (!s || s.status !== "open") return;
+  const next = (edited ?? s.suggestion).trim().slice(0, 2000);
+  let text = r.text;
+  if (s.original && text.includes(s.original)) text = text.replace(s.original, next);
+  else text = `${text.trimEnd()}\n\n${next}`;
+  const suggestions = r.analysis.suggestions.map((x) => (x.id === id ? { ...x, suggestion: next, status: "accepted" as const } : x));
+  await q.updateResumeText(userId, text.slice(0, 60_000), { ...r.analysis, suggestions });
+  refresh();
+}
+
+export async function dismissSuggestionAction(id: string) {
+  const userId = await uid();
+  const r = await myResume(userId);
+  const suggestions = r.analysis.suggestions.map((x) => (x.id === id && x.status === "open" ? { ...x, status: "dismissed" as const } : x));
+  await q.updateResumeText(userId, r.text, { ...r.analysis, suggestions });
+  refresh();
+}
+
+/** Edição manual do texto do currículo. */
+export async function saveResumeTextAction(text: string) {
+  const userId = await uid();
+  const r = await myResume(userId);
+  const t = String(text).trim();
+  if (t.length < 80) throw new Error("O currículo ficou curto demais.");
+  await q.updateResumeText(userId, t.slice(0, 60_000), r.analysis);
+  refresh();
+}
+
+/** Nova nota e novas sugestões a partir do texto atual (depois de aceitar sugestões ou editar). */
+export async function reanalyzeResumeAction() {
+  const userId = await uid();
+  return friendly(async () => {
+    const r = await myResume(userId);
+    await q.rateLimit("resume", userId, RESUME_DAILY, 86400_000, `Limite de ${RESUME_DAILY} análises de currículo por dia atingido. Tente amanhã.`);
+    const { analyzeText } = await import("@/lib/resume");
+    const { analysis } = await analyzeText(r.text);
+    await q.saveResume(userId, r.file_name, r.text, analysis); // mantém o texto como está; só a análise é nova
+    refresh();
+    return { score: analysis.score, before: r.analysis.score };
+  });
+}
+
+export async function deleteResumeAction() {
+  await q.deleteResume(await uid());
+  refresh();
+}
+
+async function jobForAi(userId: string, jobId: string) {
+  const job = await q.getJob(userId, jobId);
+  if (!job) throw new Error("Vaga não encontrada");
+  let description = job.description ?? "";
+  if (!description && job.source === "linkedin") description = await ensureDescription(jobId).catch(() => "");
+  if (!description) description = job.snippet ?? "";
+  if (description.trim().length < 40) throw new Error("Essa vaga não tem descrição suficiente para comparar. Abra o anúncio original.");
+  return { title: job.title, company: job.company, location: job.location, description };
+}
+
+/** Compara o currículo com a vaga (guarda o resultado; `force` refaz). */
+export async function jobFitAction(jobId: string, force = false) {
+  const userId = await uid();
+  return friendly(async () => {
+    const r = await myResume(userId);
+    const cur = await q.getJobFit(userId, jobId);
+    if (cur?.fit && !force && cur.resume_at >= r.updated_at) return cur;
+    await q.rateLimit("fit", userId, 40, 86400_000, "Limite diário de comparações atingido. Tente amanhã.");
+    const { fitJob } = await import("@/lib/resume");
+    const fit = await fitJob(r.text, await jobForAi(userId, jobId));
+    await q.saveJobFit(userId, jobId, fit, r.updated_at);
+    refresh();
+    return (await q.getJobFit(userId, jobId))!;
+  });
+}
+
+export async function coverLetterAction(jobId: string) {
+  const userId = await uid();
+  return friendly(async () => {
+    const r = await myResume(userId);
+    await q.rateLimit("letter", userId, 20, 86400_000, "Limite diário de cartas atingido. Tente amanhã.");
+    const { coverLetter } = await import("@/lib/resume");
+    const letter = await coverLetter(r.text, await jobForAi(userId, jobId));
+    await q.saveLetter(userId, jobId, letter, r.updated_at);
+    return letter;
+  });
+}

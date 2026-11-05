@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { getUserId, getViewer } from "@/lib/auth";
 import { UserButton } from "@clerk/nextjs";
 import { AlertTriangle, Columns3, LayoutList, Radar as RadarIcon, Star } from "lucide-react";
-import { boardCounts, filteredCount, getJob, getKv, getSeenGuides, pendingInvitesFor, jobCounts, listContacts, listJobs, listRuns, listSearches, type JobFilter } from "@/lib/db";
+import { boardCounts, filteredCount, getJob, getJobFit, getKv, getResume, getSeenGuides, pendingInvitesFor, jobCounts, listContacts, listJobs, listRuns, listSearches, type JobFilter } from "@/lib/db";
 import { isDemoMode } from "@/lib/serp";
 import { freqLabel, sourceLabel } from "@/lib/sources";
 import { includeTerms, parseSpec, specToBoolean } from "@/lib/query";
@@ -39,7 +39,9 @@ export default async function Dashboard({ searchParams }: PageProps<"/dashboard"
   const boardByS = view === "board" ? await boardCounts(userId) : ({} as Record<string, number>);
   const jobId = one("job");
   const drawerJob = jobId ? await getJob(userId, jobId) : null;
-  const contacts = drawerJob ? await listContacts(drawerJob.id) : [];
+  const [contacts, resume, fit] = drawerJob
+    ? await Promise.all([listContacts(drawerJob.id), getResume(userId), getJobFit(userId, drawerJob.id)])
+    : [[], null, null];
   const drawerSearch = drawerJob ? searches.find((s) => s.id === drawerJob.search_id) ?? null : null;
 
   const base = (extra: Record<string, string | null> = {}) => {
@@ -154,7 +156,7 @@ export default async function Dashboard({ searchParams }: PageProps<"/dashboard"
         </div>
       </main>
 
-      {drawerJob && <JobDrawer job={drawerJob} contacts={contacts} closeHref={base()} terms={drawerSearch ? includeTerms(parseSpec(drawerSearch.query_spec, drawerSearch.query)) : []} />}
+      {drawerJob && <JobDrawer job={drawerJob} contacts={contacts} closeHref={base()} terms={drawerSearch ? includeTerms(parseSpec(drawerSearch.query_spec, drawerSearch.query)) : []} resumeAt={resume?.updated_at ?? null} fit={fit} />}
     </div>
     </OnboardingProvider>
   );

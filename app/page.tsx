@@ -5,6 +5,7 @@ import {
 } from "lucide-react";
 import { Logo } from "@/components/logo";
 import { StickyCta } from "@/components/sticky-cta";
+import { Bar, ScoreRing } from "@/components/score-ring";
 
 const STICKY_HIDE = ["topo-cta", "cta-final"];
 
@@ -18,7 +19,7 @@ export default async function Home() {
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-3 sm:px-5 sm:py-5">
           <Link href="/" aria-label="Namadi Vagas, início"><Logo /></Link>
           <nav aria-label="Seções" className="hidden items-center gap-1 text-sm text-ink-2 md:flex">
-            {[["#como", "Como funciona"], ["#recursos", "Recursos"], ["#kanban", "Kanban"], ["#perguntas", "Perguntas"]].map(([h, l]) => (
+            {[["#como", "Como funciona"], ["#recursos", "Recursos"], ["#curriculo", "Currículo"], ["#kanban", "Kanban"], ["#perguntas", "Perguntas"]].map(([h, l]) => (
               <a key={h} href={h} className="rounded-full px-3.5 py-2 transition hover:bg-surface-2 hover:text-ink">{l}</a>
             ))}
           </nav>
@@ -39,7 +40,7 @@ export default async function Home() {
             A vaga certa <em className="text-accent">te encontra</em>, e as pessoas certas também.
           </h1>
           <p className="anim-rise mx-auto mt-6 max-w-xl text-base text-ink-2 sm:mt-7 sm:text-lg" style={{ animationDelay: ".12s" }}>
-            Monte suas buscas (ou deixe a IA montar a partir do seu currículo), escolha a frequência e receba só o que é novo. Favoritou? Você ganha contatos no LinkedIn e um Kanban para acompanhar cada candidatura.
+            Monte suas buscas, escolha a frequência e receba só o que é novo. Favoritou? Você ganha contatos no LinkedIn, a % de compatibilidade com o seu currículo e um Kanban para acompanhar cada candidatura.
           </p>
           <div id="topo-cta" className="anim-rise mt-8 flex flex-col items-stretch justify-center gap-3 sm:mt-9 sm:flex-row sm:items-center" style={{ animationDelay: ".18s" }}>
             <Link href={cta.href} className="group inline-flex items-center justify-center gap-2 rounded-full bg-accent px-7 py-4 font-medium text-accent-ink shadow-pop transition hover:-translate-y-0.5 hover:shadow-lg sm:py-3.5">
@@ -137,6 +138,8 @@ export default async function Home() {
 
         <PeopleSection />
 
+        <ResumeSection />
+
         <KanbanSection />
 
         {/* ---------- celular ---------- */}
@@ -220,7 +223,8 @@ const FAQ: [string, string][] = [
   ["Com que frequência o robô procura?", "Você escolhe por busca: a cada 30 minutos, 1, 3, 6 ou 12 horas, diária, semanal ou um número de minutos. Também dá para rodar na hora com “Rodar agora”."],
   ["Vou receber vaga repetida?", "Não. O robô lembra o que já encontrou e só grava vagas inéditas, que aparecem com o selo NOVA até você abrir."],
   ["Como funciona a parte dos contatos?", "Ao favoritar uma vaga, o robô procura perfis públicos do LinkedIn ligados à empresa e separa em recrutamento, liderança e pessoas do time, cada um com uma mensagem sugerida para copiar."],
-  ["Meu currículo fica guardado?", "Não. Quando você usa “Preencher com meu currículo”, o arquivo é lido na hora para sugerir a busca e depois descartado. Nada é criado sem a sua confirmação."],
+  ["Meu currículo fica guardado?", "No “Preencher com meu currículo” da busca, não: o arquivo é lido na hora e descartado. Na área Currículo, você escolhe guardar o texto (nunca o arquivo) para aceitar sugestões e comparar com as vagas, e apaga tudo quando quiser."],
+  ["Como funciona a nota do currículo?", "A IA avalia abrangência, estrutura, clareza, impacto e leitura por sistemas de triagem (ATS), dá uma nota de 0 a 100 e sugere melhorias seção por seção. Ela não inventa experiência: quando falta um dado, marca o lugar para você completar."],
   ["Quem vê uma busca compartilhada?", "Só quem você convidar por e-mail e entrar com esse mesmo e-mail. Cada pessoa tem favoritas, Kanban e e-mails próprios. Ao convidar, você escolhe o nível: pode ver, pode editar ou pode gerenciar (também convida pessoas). Só quem criou pode excluir a busca."],
   ["Dá para usar no celular?", "Sim. O painel foi pensado para telas pequenas e você pode adicioná-lo à tela de início para abrir como um app."],
 ];
@@ -463,6 +467,79 @@ function KanbanSection() {
             ))}
           </div>
         </div>
+      </div>
+    </section>
+  );
+}
+
+function ResumeSection() {
+  const chat = ["Analisando seu currículo…", "O primeiro item da experiência está vago demais. Sugestão:"];
+  return (
+    <section id="curriculo" className="mx-auto max-w-6xl scroll-mt-24 px-4 pt-24 sm:px-5 sm:pt-28">
+      <SectionHead kicker="Currículo com IA" title={<>Mais entrevistas com um <em className="text-accent">currículo melhor</em>.</>}
+        text="Envie seu currículo uma vez. A IA dá uma nota, sugere melhorias e compara com cada vaga que o robô encontrar." />
+
+      <div className="mt-12 grid gap-4 md:grid-cols-2">
+        <article className="min-w-0 rounded-3xl border border-line bg-surface p-6 shadow-card sm:p-8">
+          <span className="rounded-full border border-accent/40 bg-accent-soft px-3 py-1 text-[11px] font-semibold tracking-wider text-accent uppercase">Pontuação</span>
+          <h3 className="font-display mt-4 text-[2rem] leading-tight">Nota do currículo</h3>
+          <div className="mt-5 rounded-2xl border border-line bg-bg/60 p-4 shadow-card sm:p-5">
+            <p className="text-xs text-ink-3">Pontuação do currículo</p>
+            <div className="mt-3 flex items-center gap-4"><ScoreRing value={87} size={64} /><div><p className="font-semibold">Muito bom</p><p className="text-xs text-ink-3">Falta mostrar resultados em números</p></div></div>
+            <div className="mt-4 space-y-3">
+              {[["Abrangência", 92], ["Estrutura", 85], ["Clareza", 78]].map(([l, v]) => (
+                <div key={l as string}><div className="mb-1 flex justify-between text-xs"><span className="text-ink-2">{l as string}</span><span className="text-ink-3">{v as number}%</span></div><Bar value={v as number} /></div>
+              ))}
+            </div>
+          </div>
+          <p className="mt-5 text-ink-2">Uma avaliação na hora, com o que recrutadores e sistemas de triagem (ATS) procuram, e o que fazer para melhorar.</p>
+        </article>
+
+        <article className="min-w-0 rounded-3xl border border-line bg-surface p-6 shadow-card sm:p-8">
+          <span className="rounded-full border border-accent/40 bg-accent-soft px-3 py-1 text-[11px] font-semibold tracking-wider text-accent uppercase">Especialista com IA</span>
+          <h3 className="font-display mt-4 text-[2rem] leading-tight">Sugestões seção por seção</h3>
+          <div className="mt-5 space-y-2.5">
+            {chat.map((t) => (
+              <p key={t} className="flex items-center gap-2">
+                <span className="grid size-7 shrink-0 place-items-center rounded-full bg-ink text-bg"><Sparkles className="size-3.5" /></span>
+                <span className="rounded-2xl rounded-tl-md bg-surface-2 px-3 py-2 text-sm">{t}</span>
+              </p>
+            ))}
+            <div className="ml-9 rounded-2xl border border-line bg-bg/60 p-3 text-sm">
+              <p className="rounded-lg bg-surface-2 px-2.5 py-1.5 text-ink-3 line-through decoration-accent/50">Responsável pelo design do app</p>
+              <p className="mt-1.5 rounded-lg bg-ok-soft px-2.5 py-1.5">Redesenhei o checkout do app e reduzi o abandono em [X%]</p>
+            </div>
+            <p className="flex items-center gap-2">
+              <span className="grid size-7 shrink-0 place-items-center rounded-full bg-ok text-white"><Check className="size-3.5" /></span>
+              <span className="rounded-2xl rounded-tl-md bg-surface-2 px-3 py-2 text-sm">Aceito! Currículo atualizado 🎉</span>
+            </p>
+          </div>
+          <p className="mt-5 text-ink-2">Aceite, edite ou ignore cada sugestão. A IA nunca inventa experiência: quando falta um número, ela marca o lugar para você completar.</p>
+        </article>
+
+        <article className="min-w-0 rounded-3xl border border-line bg-surface p-6 shadow-card sm:p-8 md:col-span-2">
+          <div className="grid items-center gap-8 md:grid-cols-[1fr_1.1fr]">
+            <div>
+              <span className="rounded-full border border-accent/40 bg-accent-soft px-3 py-1 text-[11px] font-semibold tracking-wider text-accent uppercase">Em cada vaga</span>
+              <h3 className="font-display mt-4 text-[2rem] leading-tight">Compatibilidade, currículo adaptado e carta</h3>
+              <p className="mt-3 text-ink-2">Abra uma vaga e veja a % de compatibilidade, os requisitos que você atende e os que faltam. Copie o resumo reescrito para aquela vaga e gere uma carta de apresentação em segundos.</p>
+            </div>
+            <div className="flex flex-col items-stretch gap-3 sm:flex-row">
+              <div className="flex flex-1 flex-col items-center rounded-2xl border border-ok/40 bg-ok-soft/50 p-5 text-center">
+                <ScoreRing value={96} size={92} suffix="%" />
+                <span className="mt-3 inline-flex items-center gap-1 rounded-full bg-ok px-3 py-1 text-[11px] font-bold tracking-wide text-white uppercase"><Star className="size-3 fill-current" /> Top match</span>
+              </div>
+              <div className="flex-1 rounded-2xl border border-line bg-bg/60 p-4">
+                <div className="flex flex-wrap gap-1.5">
+                  {["Figma", "Design system", "Pesquisa"].map((t) => <span key={t} className="rounded-full bg-ok-soft px-2.5 py-1 text-xs font-medium text-ok">✓ {t}</span>)}
+                  <span className="rounded-full border border-accent/40 bg-accent-soft/60 px-2.5 py-1 text-xs font-medium text-accent">+ SQL</span>
+                </div>
+                <p className="mt-3 text-xs font-semibold">Carta de apresentação</p>
+                <div className="mt-2 space-y-1.5">{[100, 90, 96, 64].map((w, i) => <span key={i} className="block h-1.5 rounded-full bg-surface-2" style={{ width: `${w}%` }} />)}</div>
+              </div>
+            </div>
+          </div>
+        </article>
       </div>
     </section>
   );

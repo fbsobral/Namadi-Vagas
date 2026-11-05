@@ -3,7 +3,7 @@
 import { createContext, useContext, useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
-  ArrowRightLeft, BookOpen, Bot, Check, ChevronLeft, ChevronRight, CircleCheck, CircleHelp, Clock, Columns3, Copy, Eye, Funnel,
+  ArrowRightLeft, BookOpen, FileText, Bot, Check, ChevronLeft, ChevronRight, CircleCheck, CircleHelp, Clock, Columns3, Copy, Eye, Funnel,
   LayoutList, Lightbulb, LogOut, Mail, Radar, RotateCcw, Search, Share2, Smartphone, Sparkles, Star, Users, X,
 } from "lucide-react";
 import { GuideVisual } from "./guide-visuals";
@@ -12,7 +12,7 @@ import { GUIDES, MODULE_GUIDES, type GuideId, type IconKey } from "@/lib/onboard
 export const ICONS: Record<IconKey, React.ComponentType<{ className?: string }>> = {
   radar: Radar, search: Search, bot: Bot, star: Star, users: Users, kanban: Columns3, mail: Mail, share: Share2, sparkles: Sparkles,
   filter: Funnel, list: LayoutList, phone: Smartphone, clock: Clock, eye: Eye, copy: Copy, move: ArrowRightLeft, help: CircleHelp,
-  check: Check, logout: LogOut,
+  check: Check, logout: LogOut, file: FileText,
 };
 
 /* ---------- contexto ---------- */

@@ -6,6 +6,7 @@ import {
   RefreshCw, Search, Send, Share2, Sparkles, Star, Trash2, UserPlus, X,
 } from "lucide-react";
 import type { VisualKey } from "@/lib/onboarding";
+import { Bar, ScoreRing } from "./score-ring";
 
 /* ---------- peças ---------- */
 
@@ -459,6 +460,80 @@ const V: Record<VisualKey, () => React.ReactNode> = {
     </Frame>
   ),
 
+
+  resumeScore: () => (
+    <Frame>
+      <Screen>
+        <p className="text-[9px] font-semibold tracking-wider text-ink-3 uppercase">Pontuação do currículo</p>
+        <div className="mt-2 flex items-center gap-3">
+          <ScoreRing value={87} size={56} />
+          <div><p className="text-[12px] font-semibold">Muito bom</p><p className="text-[9.5px] text-ink-3">Product Designer sênior</p></div>
+        </div>
+        <div className="mt-2.5 space-y-1.5">
+          {[["Abrangência", 92], ["Estrutura", 85], ["Clareza", 78]].map(([l, v], k) => (
+            <div key={l as string} className="anim-pop" style={d(0.2 + k * 0.12)}>
+              <div className="mb-0.5 flex justify-between text-[9.5px]"><span>{l as string}</span><span className="text-ink-3">{v as number}%</span></div>
+              <Bar value={v as number} />
+            </div>
+          ))}
+        </div>
+      </Screen>
+    </Frame>
+  ),
+
+  resumeChat: () => (
+    <Frame>
+      <div className="space-y-1.5">
+        {[["Analisando seu currículo…", 0], ["O primeiro item da experiência está vago. Sugestão:", 0.5]].map(([t, s]) => (
+          <p key={t as string} className="anim-pop flex items-center gap-1.5" style={d(s as number)}>
+            <span className="grid size-5 shrink-0 place-items-center rounded-full bg-ink text-bg"><Sparkles className="size-2.5" /></span>
+            <span className="rounded-xl rounded-tl-sm bg-surface px-2 py-1 text-[10px] shadow-card">{t as string}</span>
+          </p>
+        ))}
+        <Screen className="!p-2.5" style={d(0.9)}>
+          <p className="rounded-lg bg-surface-2 px-2 py-1 text-[9.5px] text-ink-3 line-through decoration-accent/60">Responsável pelo design do app</p>
+          <p className="mt-1 rounded-lg bg-ok-soft px-2 py-1 text-[9.5px]">Redesenhei o checkout do app e reduzi o abandono em [X%]</p>
+          <div className="mt-1.5 flex gap-1"><Btn primary className="g-press"><Check className="size-3" /> Aceitar</Btn><Btn><Pencil className="size-3" /> Editar</Btn></div>
+        </Screen>
+        <p className="anim-pop flex items-center gap-1.5" style={d(1.6)}>
+          <span className="grid size-5 shrink-0 place-items-center rounded-full bg-ok text-white"><Check className="size-2.5" /></span>
+          <span className="rounded-xl rounded-tl-sm bg-surface px-2 py-1 text-[10px] shadow-card">Aceito! Currículo atualizado 🎉</span>
+        </p>
+      </div>
+    </Frame>
+  ),
+
+  resumeFit: () => (
+    <Frame>
+      <Screen className="!border-ok/40 text-center">
+        <div className="flex items-center justify-center gap-3">
+          <ScoreRing value={96} size={60} suffix="%" />
+          <div className="text-left">
+            <span className="inline-flex items-center gap-1 rounded-full bg-ok px-2 py-0.5 text-[8.5px] font-bold tracking-wide text-white uppercase"><Star className="size-2.5 fill-current" /> Top match</span>
+            <p className="mt-1 text-[10px] text-ink-2">Product Designer Sênior · Nubank</p>
+          </div>
+        </div>
+        <div className="mt-2.5 flex flex-wrap justify-center gap-1">
+          {["Figma", "Design system", "Pesquisa"].map((t, k) => <span key={t} className="anim-pop rounded-full bg-ok-soft px-2 py-0.5 text-[9.5px] font-medium text-ok" style={d(0.4 + k * 0.1)}>✓ {t}</span>)}
+          <span className="anim-pop rounded-full border border-accent/40 bg-accent-soft/60 px-2 py-0.5 text-[9.5px] font-medium text-accent" style={d(0.8)}>+ SQL</span>
+        </div>
+      </Screen>
+    </Frame>
+  ),
+
+  resumeLetter: () => (
+    <Frame>
+      <Screen>
+        <div className="flex items-center justify-between"><p className="flex items-center gap-1 text-[10.5px] font-semibold"><FileText className="size-3 text-accent" /> Carta de apresentação</p><Btn className="g-press"><Copy className="size-2.5" /> Copiar</Btn></div>
+        <div className="mt-2 space-y-1">
+          {[100, 92, 96, 70, 0, 98, 88, 60].map((w, i) => w
+            ? <span key={i} className="anim-pop block h-1.5 rounded-full bg-surface-2" style={{ width: `${w}%`, ...d(0.15 + i * 0.08) }} />
+            : <span key={i} className="block h-1" />)}
+        </div>
+        <p className="mt-2 text-[9.5px] text-ink-3">Escrita a partir do seu currículo e dos requisitos da vaga.</p>
+      </Screen>
+    </Frame>
+  ),
 };
 
 function KanbanMini({ select = false }: { select?: boolean }) {

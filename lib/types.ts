@@ -55,6 +55,7 @@ export type Job = {
   filtered_reason: string | null;
   filter_keep: number; // 1 = usuário mandou manter, não filtrar de novo
   is_owner?: boolean;
+  fit_score?: number | null; // compatibilidade com o currículo, quando já calculada
   search_name?: string;
   search_color?: string;
 };

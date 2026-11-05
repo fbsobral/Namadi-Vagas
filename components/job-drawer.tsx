@@ -10,6 +10,8 @@ import { Avatar } from "./avatar";
 import { FavoriteButton } from "./favorite-button";
 import { JobDescription } from "./job-description";
 import { HelpButton, ModuleTip } from "./guide";
+import { JobFit } from "./job-fit";
+import type { JobFitRow } from "@/lib/resume-shared";
 import { hrefOf } from "@/lib/safe-url";
 import { timeAgo } from "@/lib/format";
 import { sourceLabel } from "@/lib/sources";
@@ -28,7 +30,7 @@ function icebreaker(c: Contact, job: Job) {
   return `Olá ${first}! Vi que você atua na ${job.company} e estou considerando a vaga de ${job.title}. Posso te fazer duas perguntas sobre como é o dia a dia por aí?`;
 }
 
-export function JobDrawer({ job, contacts, closeHref, terms }: { job: Job; contacts: Contact[]; closeHref: string; terms: string[] }) {
+export function JobDrawer({ job, contacts, closeHref, terms, resumeAt = null, fit = null }: { job: Job; contacts: Contact[]; closeHref: string; terms: string[]; resumeAt?: number | null; fit?: JobFitRow | null }) {
   const router = useRouter();
 
   useEffect(() => {
@@ -76,7 +78,9 @@ export function JobDrawer({ job, contacts, closeHref, terms }: { job: Job; conta
           </div>
         </div>
 
-        <section className="pb-safe mt-2 flex-1 border-t border-line bg-surface-2/40 px-5 py-6 sm:px-6">
+        <JobFit key={job.id} jobId={job.id} hasResume={resumeAt !== null} resumeAt={resumeAt} initial={fit} />
+
+        <section className="pb-safe flex-1 border-t border-line bg-surface-2/40 px-5 py-6 sm:px-6">
           <div className="flex items-start justify-between gap-3">
             <div>
               <h3 className="font-display text-3xl">Pessoas para conhecer</h3>
