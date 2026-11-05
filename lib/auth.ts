@@ -16,7 +16,7 @@ export async function getViewerEmail(): Promise<string | null> {
   return primary && primary.verification?.status === "verified" ? primary.emailAddress.toLowerCase() : null;
 }
 
-export type Viewer = { userId: string; name: string; firstName: string | null; email: string | null; emails: string[] };
+export type Viewer = { userId: string; name: string; firstName: string | null; email: string | null; emails: string[]; role: string | null };
 
 /** Quem está logado: nome e e-mails VERIFICADOS (um convite só vale para um desses). */
 export async function getViewer(): Promise<Viewer | null> {
@@ -26,11 +26,19 @@ export async function getViewer(): Promise<Viewer | null> {
   const emails = verified.map((e) => e.emailAddress.toLowerCase());
   const primary = verified.find((e) => e.id === u.primaryEmailAddressId)?.emailAddress.toLowerCase() ?? emails[0] ?? null;
   const name = [u.firstName, u.lastName].filter(Boolean).join(" ") || u.username || (primary ? primary.split("@")[0] : "Alguém");
-  return { userId: u.id, name, firstName: u.firstName, email: primary, emails };
+  // papel vem do Public metadata do Clerk (só o painel do Clerk e o servidor alteram; a pessoa não consegue se promover)
+  const role = typeof u.publicMetadata?.role === "string" ? u.publicMetadata.role : null;
+  return { userId: u.id, name, firstName: u.firstName, email: primary, emails, role };
 }
 
-/** Administradores da plataforma: e-mails VERIFICADOS listados em ADMIN_EMAILS (separados por vírgula). */
+/**
+ * Administradores da plataforma, por qualquer um dos dois caminhos:
+ *  - no Clerk: Users › (pessoa) › Metadata › Public = { "role": "admin" };
+ *  - ou e-mail VERIFICADO listado em ADMIN_EMAILS (separados por vírgula), útil como acesso de emergência.
+ */
 export function isAdminViewer(v: Viewer | null) {
+  if (!v) return false;
+  if (v.role === "admin") return true;
   const admins = (process.env.ADMIN_EMAILS ?? "").split(",").map((e) => e.trim().toLowerCase()).filter(Boolean);
-  return !!v && admins.length > 0 && v.emails.some((e) => admins.includes(e));
+  return admins.length > 0 && v.emails.some((e) => admins.includes(e));
 }

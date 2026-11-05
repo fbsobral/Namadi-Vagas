@@ -13,7 +13,7 @@ export const metadata = { title: "Admin · IA — Namadi Vagas", robots: { index
 
 export default async function AdminPage() {
   if (!(await getUserId())) redirect("/sign-in");
-  if (!isAdminViewer(await getViewer())) notFound(); // só administradores (ADMIN_EMAILS); os demais nem sabem que existe
+  if (!isAdminViewer(await getViewer())) notFound(); // só administradores (role "admin" no Clerk ou ADMIN_EMAILS); os demais nem sabem que existe
 
   const [cfg, rows] = await Promise.all([getAiConfig(), aiUsageSince(30)]);
   const stats = buildStats(rows);
