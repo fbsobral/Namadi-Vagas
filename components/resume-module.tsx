@@ -8,6 +8,7 @@ import {
 import { acceptSuggestionAction, adaptCvAction, deleteCvAction, dismissSuggestionAction, reanalyzeResumeAction, refineSuggestionAction, saveResumeTextAction, setCvTargetAction, setPrimaryCvAction } from "@/app/actions";
 import Link from "next/link";
 import { useAiFlags } from "./ai-flags";
+import { useJobs } from "./background-jobs";
 import { SUBSCORES, type Resume, type ResumeSuggestion } from "@/lib/resume-shared";
 import type { FitJobItem } from "@/lib/db";
 import { FitList } from "./fit-list";
@@ -36,7 +37,7 @@ export function ResumeModule({ cvs, cv, jobs, quota, configured, autoFit, usedBy
 
 /* ---------- envio ---------- */
 
-function useUpload(onDone: (id: string) => void) {
+function useUpload(onDone: (jobId: string) => void) {
   const [state, setState] = useState<{ t: "idle" } | { t: "busy"; name: string } | { t: "error"; msg: string }>({ t: "idle" });
   const send = async (file: File, fields: { cvId?: string; target?: string } = {}) => {
     setState({ t: "busy", name: file.name });
@@ -46,10 +47,10 @@ function useUpload(onDone: (id: string) => void) {
       if (fields.cvId) body.set("cvId", fields.cvId);
       if (fields.target) body.set("target", fields.target);
       const res = await fetch("/api/resume", { method: "POST", body });
-      const json = (await res.json().catch(() => null)) as { error?: string; id?: string } | null;
-      if (!res.ok || json?.error || !json?.id) throw new Error(json?.error ?? "Não consegui analisar o currículo.");
+      const json = (await res.json().catch(() => null)) as { error?: string; jobId?: string } | null;
+      if (!res.ok || json?.error || !json?.jobId) throw new Error(json?.error ?? "Não consegui analisar o currículo.");
       setState({ t: "idle" });
-      onDone(json.id);
+      onDone(json.jobId);
     } catch (e) {
       setState({ t: "error", msg: e instanceof Error ? e.message : "Não consegui analisar o currículo." });
     }
@@ -59,12 +60,14 @@ function useUpload(onDone: (id: string) => void) {
 
 /** Envio de arquivo. Com `cvId`, substitui aquele currículo; sem, cria um novo (com cargo-alvo opcional). */
 function Dropzone({ configured, compact, cvId, askTarget }: { configured: boolean; compact?: boolean; cvId?: string; askTarget?: boolean }) {
-  const router = useRouter();
   const input = useRef<HTMLInputElement>(null);
   const [drag, setDrag] = useState(false);
   const [target, setTarget] = useState("");
-  const { state, send } = useUpload((id) => { if (id !== cvId) router.push(`/dashboard/curriculo?cv=${id}`); router.refresh(); });
-  const busy = state.t === "busy";
+  const jobs = useJobs();
+  // a análise roda em segundo plano: o aviso flutuante acompanha, e dá para trocar de tela
+  const { state, send } = useUpload((jobId) => jobs?.track(jobId));
+  const working = !!jobs?.busy("resume", cvId ?? null);
+  const busy = state.t === "busy" || working;
   // a análise é feita para um cargo: sem cargo-alvo, o envio não libera
   const needTarget = !!askTarget && target.trim().length < 2;
   const go = (f: File) => { if (!needTarget) send(f, { cvId, target: target.trim() || undefined }); };
@@ -88,8 +91,8 @@ function Dropzone({ configured, compact, cvId, askTarget }: { configured: boolea
           {busy ? <Loader2 className="spin size-6" /> : <Upload className="size-6" />}
         </span>
         <span className="min-w-0">
-          <span className="block font-semibold">{busy ? `Analisando ${state.name}…` : cvId ? "Enviar nova versão deste currículo" : "Envie seu currículo"}</span>
-          <span className="block text-sm text-ink-3">{busy ? "A IA está lendo seção por seção. Leva uns 30 segundos." : needTarget ? "Primeiro diga o cargo-alvo, acima." : "PDF, DOCX ou TXT, até 5 MB. Toque ou arraste o arquivo aqui."}</span>
+          <span className="block font-semibold">{state.t === "busy" ? `Enviando ${state.name}…` : working ? "Analisando em segundo plano…" : cvId ? "Enviar nova versão deste currículo" : "Envie seu currículo"}</span>
+          <span className="block text-sm text-ink-3">{busy ? "Leva uns 30 segundos. Pode trocar de tela: avisamos quando terminar." : needTarget ? "Primeiro diga o cargo-alvo, acima." : "PDF, DOCX ou TXT, até 5 MB. Toque ou arraste o arquivo aqui."}</span>
         </span>
       </button>
       <input ref={input} type="file" hidden accept=".pdf,.docx,.txt,.md,application/pdf" onChange={(e) => { const f = e.target.files?.[0]; if (f) go(f); e.target.value = ""; }} />
@@ -154,7 +157,7 @@ function CvSwitcher({ cvs, current, configured }: { cvs: CvLite[]; current: stri
 }
 
 function NewCv({ cvs, configured, onDone }: { cvs: CvLite[]; configured: boolean; onDone: () => void }) {
-  const router = useRouter();
+  const jobs = useJobs();
   const flags = useAiFlags();
   const [mode, setMode] = useState<"adapt" | "upload">(cvs.length ? "adapt" : "upload");
   const [from, setFrom] = useState(cvs.find((c) => c.is_primary)?.id ?? cvs[0]?.id ?? "");
@@ -165,8 +168,8 @@ function NewCv({ cvs, configured, onDone }: { cvs: CvLite[]; configured: boolean
     setErr(null);
     const r = await adaptCvAction(from, target);
     if (!r.ok) return setErr(r.error);
+    jobs?.track(r.data.jobId); // segue em segundo plano; o aviso mostra quando ficar pronto
     onDone();
-    router.push(`/dashboard/curriculo?cv=${r.data.id}`);
   });
   return (
     <div className="anim-pop mt-3 rounded-3xl border border-line bg-surface p-5 shadow-card sm:p-6">
@@ -194,7 +197,7 @@ function NewCv({ cvs, configured, onDone }: { cvs: CvLite[]; configured: boolean
           <div className="flex flex-wrap items-center gap-2">
             <button disabled={pending || target.trim().length < 2 || !flags.resume} onClick={adapt}
               className="inline-flex min-h-11 items-center gap-2 rounded-full bg-accent px-5 text-sm font-medium text-accent-ink disabled:opacity-50">
-              {pending ? <><Loader2 className="spin size-4" /> Adaptando… (uns 40 s)</> : <><Sparkles className="size-4" /> Criar versão adaptada</>}
+              {pending ? <><Loader2 className="spin size-4" /> Enviando…</> : <><Sparkles className="size-4" /> Criar versão adaptada</>}
             </button>
             <button onClick={onDone} className="min-h-11 rounded-full px-4 text-sm text-ink-3 hover:text-ink">Cancelar</button>
           </div>
@@ -209,6 +212,8 @@ function NewCv({ cvs, configured, onDone }: { cvs: CvLite[]; configured: boolean
 
 function CvHeader({ cv, usedBy }: { cv: Resume; usedBy: UsedBy }) {
   const router = useRouter();
+  const jobs = useJobs();
+  const analyzing = !!jobs?.busy("resume", cv.id);
   const flags = useAiFlags();
   const missing = !cv.target_role.trim();
   const [editing, setEditing] = useState(missing);
@@ -220,6 +225,7 @@ function CvHeader({ cv, usedBy }: { cv: Resume; usedBy: UsedBy }) {
     setErr(null);
     const r = await setCvTargetAction(cv.id, target);
     if (!r.ok) return setErr(r.error);
+    jobs?.track(r.data.jobId);
     setEditing(false);
     router.refresh();
   });
@@ -247,6 +253,7 @@ function CvHeader({ cv, usedBy }: { cv: Resume; usedBy: UsedBy }) {
             <p className="text-xs font-medium tracking-wider text-ink-3 uppercase">Cargo-alvo</p>
             <p className="mt-0.5 flex flex-wrap items-center gap-2">
               <span className="font-display text-2xl leading-tight sm:text-3xl">{cv.target_role}</span>
+              {analyzing && <span className="inline-flex items-center gap-1 rounded-full bg-surface-2 px-2 py-0.5 text-xs text-ink-2"><Loader2 className="spin size-3" /> analisando</span>}
               {cv.is_primary ? <span className="rounded-full bg-accent-soft px-2 py-0.5 text-xs font-semibold text-accent">principal</span> : null}
             </p>
             <p className="mt-2 text-xs text-ink-3">
@@ -279,13 +286,13 @@ function Loaded({ resume, jobs, quota, configured, autoFit }: { resume: Resume; 
   const done = a.suggestions.filter((s) => s.status === "accepted").length;
   const edited = resume.updated_at > resume.analyzed_at;
 
+  const bg = useJobs();
+  const analyzing = !!bg?.busy("resume", resume.id);
   const reanalyze = () => start(async () => {
     setMsg(null);
     const r = await reanalyzeResumeAction(resume.id);
     if (!r.ok) return setMsg({ ok: false, text: r.error });
-    const diff = r.data.score - r.data.before;
-    setMsg({ ok: true, text: diff > 0 ? `Nova nota: ${r.data.score} (+${diff}). Mandou bem!` : `Nova nota: ${r.data.score}.` });
-    router.refresh();
+    bg?.track(r.data.jobId); // a nova nota chega pelo aviso, mesmo se você trocar de tela
   });
 
   const download = () => {
@@ -335,8 +342,8 @@ function Loaded({ resume, jobs, quota, configured, autoFit }: { resume: Resume; 
               </div>
             </div>
             <div className="scroll-thin -mx-5 mt-4 flex gap-2 overflow-x-auto px-5 pb-1 sm:mx-0 sm:flex-wrap sm:px-0">
-              <button className={`${btn} !border-ink !bg-ink !text-bg`} disabled={pending || !configured || !resume.target_role.trim()} onClick={reanalyze} title={resume.target_role.trim() ? undefined : "Defina o cargo-alvo primeiro"}>
-                <RefreshCw className={`size-4 ${pending ? "spin" : ""}`} /> {pending ? "Analisando…" : "Reanalisar"}
+              <button className={`${btn} !border-ink !bg-ink !text-bg`} disabled={pending || analyzing || !configured || !resume.target_role.trim()} onClick={reanalyze} title={resume.target_role.trim() ? undefined : "Defina o cargo-alvo primeiro"}>
+                <RefreshCw className={`size-4 ${pending || analyzing ? "spin" : ""}`} /> {pending || analyzing ? "Analisando…" : "Reanalisar"}
               </button>
               <button className={btn} onClick={download}><Download className="size-4" /> .txt</button>
               <a className={btn} href={`/dashboard/curriculo/imprimir?cv=${resume.id}`} target="_blank" rel="noopener"><Printer className="size-4" /> Imprimir / PDF</a>

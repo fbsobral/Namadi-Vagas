@@ -404,11 +404,15 @@ export async function reanalyzeResumeAction(cvId: string) {
     const r = await myCv(userId, cvId);
     if (!r.target_role.trim()) throw new Error("Defina o cargo-alvo deste currículo antes de analisar.");
     await resumeQuota(userId);
-    const { analyzeText } = await import("@/lib/resume");
-    const { analysis } = await analyzeText(r.text, r.target_role);
-    await q.saveCvAnalysis(r.id, r.file_name, r.text, analysis); // mantém o texto; só a análise é nova
-    refresh();
-    return { score: analysis.score, before: r.analysis.score };
+    const { startAiJob, scoreNote } = await import("@/lib/jobs");
+    // em segundo plano: dá para trocar de tela que a nova nota fica guardada
+    const jobId = await startAiJob(userId, "resume", r.target_role, r.id, async () => {
+      const { analyzeText } = await import("@/lib/resume");
+      const { analysis } = await analyzeText(r.text, r.target_role);
+      await q.saveCvAnalysis(r.id, r.file_name, r.text, analysis); // mantém o texto; só a análise é nova
+      return { id: r.id, note: scoreNote(analysis.score, r.analysis.score) };
+    });
+    return { jobId };
   });
 }
 
@@ -423,12 +427,16 @@ export async function setCvTargetAction(cvId: string, target: string) {
     const t = cleanName(target, 120);
     if (t.length < 2) throw new Error("Diga o cargo-alvo deste currículo.");
     await resumeQuota(userId);
-    const { analyzeText } = await import("@/lib/resume");
-    const { analysis } = await analyzeText(r.text, t);
     await q.updateCvMeta(userId, r.id, t.slice(0, 60), t);
-    await q.saveCvAnalysis(r.id, r.file_name, r.text, analysis);
+    const { startAiJob, scoreNote } = await import("@/lib/jobs");
+    const jobId = await startAiJob(userId, "resume", t, r.id, async () => {
+      const { analyzeText } = await import("@/lib/resume");
+      const { analysis } = await analyzeText(r.text, t);
+      await q.saveCvAnalysis(r.id, r.file_name, r.text, analysis);
+      return { id: r.id, note: scoreNote(analysis.score, r.analysis.score) };
+    });
     refresh();
-    return { score: analysis.score, before: r.analysis.score };
+    return { jobId };
   });
 }
 
@@ -453,11 +461,15 @@ export async function adaptCvAction(fromCvId: string, target: string) {
     if (t.length < 2) throw new Error("Diga para qual cargo é a nova versão.");
     if ((await q.countCvs(userId)) >= q.MAX_CVS) throw new Error(`Você já tem ${q.MAX_CVS} currículos. Apague um para criar outro.`);
     await resumeQuota(userId);
-    const { adaptResume } = await import("@/lib/resume");
-    const { text, analysis } = await adaptResume(from.text, t);
-    const id = await q.createCv(userId, { name: t.slice(0, 60), target_role: t, file_name: from.file_name, text, analysis });
-    refresh();
-    return { id };
+    const { startAiJob, scoreNote } = await import("@/lib/jobs");
+    const jobId = await startAiJob(userId, "adapt", t, from.id, async () => {
+      const { adaptResume } = await import("@/lib/resume");
+      const { text, analysis } = await adaptResume(from.text, t);
+      if ((await q.countCvs(userId)) >= q.MAX_CVS) throw new Error(`Você já tem ${q.MAX_CVS} currículos.`);
+      const id = await q.createCv(userId, { name: t.slice(0, 60), target_role: t, file_name: from.file_name, text, analysis });
+      return { id, note: scoreNote(analysis.score) };
+    });
+    return { jobId };
   });
 }
 
@@ -587,11 +599,14 @@ export async function reanalyzeLinkedinAction(target?: string) {
     const { getAiConfig } = await import("@/lib/ai-config");
     const n = (await getAiConfig()).features.linkedin.daily;
     await q.rateLimit("linkedin", userId, n, 86400_000, `Limite de ${n} análises de perfil por dia atingido. Tente amanhã.`);
-    const { analyzeLinkedin } = await import("@/lib/linkedin");
-    const { analysis } = await analyzeLinkedin([{ type: "text", text: `Este é o perfil do LinkedIn:\n\n${p.text}\n\nAnalise.` }], t);
-    await q.saveLinkedin(userId, { text: p.text, target_role: t, file_name: p.file_name, analysis });
-    refresh();
-    return { score: analysis.score, before: p.analysis.score };
+    const { startAiJob, scoreNote } = await import("@/lib/jobs");
+    const jobId = await startAiJob(userId, "linkedin", t, null, async () => {
+      const { analyzeLinkedin } = await import("@/lib/linkedin");
+      const { analysis } = await analyzeLinkedin([{ type: "text", text: `Este é o perfil do LinkedIn:\n\n${p.text}\n\nAnalise.` }], t);
+      await q.saveLinkedin(userId, { text: p.text, target_role: t, file_name: p.file_name, analysis });
+      return { id: null, note: scoreNote(analysis.score, p.analysis.score) };
+    });
+    return { jobId };
   });
 }
 

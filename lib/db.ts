@@ -230,6 +230,23 @@ CREATE TABLE IF NOT EXISTS linkedin_profiles (
   analyzed_at BIGINT NOT NULL
 );
 
+-- análises de IA em segundo plano (currículo, LinkedIn, adaptar): a tela pode fechar que o servidor termina
+CREATE TABLE IF NOT EXISTS ai_jobs (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  label TEXT NOT NULL DEFAULT '',
+  ref_id TEXT,
+  status TEXT NOT NULL DEFAULT 'pending',
+  result_id TEXT,
+  note TEXT,
+  error TEXT,
+  seen INTEGER NOT NULL DEFAULT 0,
+  created_at BIGINT NOT NULL,
+  finished_at BIGINT
+);
+CREATE INDEX IF NOT EXISTS idx_ai_jobs_user ON ai_jobs(user_id, created_at DESC);
+
 -- preferências da pessoa
 CREATE TABLE IF NOT EXISTS user_prefs (
   user_id TEXT PRIMARY KEY,
@@ -1056,3 +1073,33 @@ export const updateLinkedinAnalysis = (userId: string, analysis: LinkedinAnalysi
   run("UPDATE linkedin_profiles SET analysis = ?, updated_at = ? WHERE user_id = ?", JSON.stringify(analysis), Date.now(), userId);
 
 export const deleteLinkedin = (userId: string) => run("DELETE FROM linkedin_profiles WHERE user_id = ?", userId);
+
+/* ---------- análises em segundo plano ---------- */
+
+export type AiJob = { id: string; kind: "resume" | "linkedin" | "adapt"; label: string; ref_id: string | null; status: "pending" | "done" | "error"; result_id: string | null; note: string | null; error: string | null; created_at: number; finished_at: number | null };
+
+const JOB_STALE_MS = 10 * 60_000;
+
+export async function createAiJob(userId: string, kind: AiJob["kind"], label: string, refId: string | null = null) {
+  const id = uuid();
+  await run("INSERT INTO ai_jobs (id, user_id, kind, label, ref_id, status, created_at) VALUES (?, ?, ?, ?, ?, 'pending', ?)", id, userId, kind, label.slice(0, 120), refId, Date.now());
+  return id;
+}
+
+export const finishAiJob = (id: string, resultId: string | null, note: string | null) =>
+  run("UPDATE ai_jobs SET status = 'done', result_id = ?, note = ?, finished_at = ? WHERE id = ?", resultId, note, Date.now(), id);
+
+export const failAiJob = (id: string, error: string) =>
+  run("UPDATE ai_jobs SET status = 'error', error = ?, finished_at = ? WHERE id = ?", error.slice(0, 300), Date.now(), id);
+
+/** Análises da pessoa para mostrar no aviso: em andamento, e as terminadas nos últimos 10 min que ela ainda não fechou. */
+export async function activeAiJobs(userId: string) {
+  // processo reiniciou no meio: a análise não volta sozinha
+  await run("UPDATE ai_jobs SET status = 'error', error = 'A análise foi interrompida. Tente de novo.', finished_at = ? WHERE user_id = ? AND status = 'pending' AND created_at < ?", Date.now(), userId, Date.now() - JOB_STALE_MS);
+  return all<AiJob>(
+    "SELECT id, kind, label, ref_id, status, result_id, note, error, created_at, finished_at FROM ai_jobs WHERE user_id = ? AND seen = 0 AND (status = 'pending' OR finished_at > ?) ORDER BY created_at DESC LIMIT 5",
+    userId, Date.now() - JOB_STALE_MS,
+  );
+}
+
+export const ackAiJob = (userId: string, id: string) => run("UPDATE ai_jobs SET seen = 1 WHERE id = ? AND user_id = ? AND status <> 'pending'", id, userId);

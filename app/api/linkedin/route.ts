@@ -1,7 +1,8 @@
 import { getUserId } from "@/lib/auth";
 import { CV_MAX_BYTES, CvError, fileContent } from "@/lib/resume";
 import { analyzeLinkedin } from "@/lib/linkedin";
-import { rateLimit, saveLinkedin } from "@/lib/db";
+import { getLinkedin, rateLimit, saveLinkedin } from "@/lib/db";
+import { scoreNote, startAiJob } from "@/lib/jobs";
 import { getAiConfig } from "@/lib/ai-config";
 
 export const dynamic = "force-dynamic";
@@ -36,9 +37,14 @@ export async function POST(req: Request) {
     }
     const daily = (await getAiConfig()).features.linkedin.daily;
     await rateLimit("linkedin", userId, daily, 86400_000, `Limite de ${daily} análises de perfil por dia atingido. Tente amanhã.`);
-    const { text, analysis } = await analyzeLinkedin(content, target);
-    await saveLinkedin(userId, { text, target_role: target, file_name: fileName, analysis });
-    return Response.json({ ok: true });
+    // a análise roda em segundo plano: a pessoa pode trocar de tela que o resultado fica guardado
+    const jobId = await startAiJob(userId, "linkedin", target, null, async () => {
+      const before = await getLinkedin(userId);
+      const { text, analysis } = await analyzeLinkedin(content, target);
+      await saveLinkedin(userId, { text, target_role: target, file_name: fileName, analysis });
+      return { id: null, note: scoreNote(analysis.score, before?.analysis.score) };
+    });
+    return Response.json({ ok: true, jobId });
   } catch (e) {
     if (e instanceof CvError) return Response.json({ error: e.message }, { status: e.status });
     const msg = e instanceof Error ? e.message : "";

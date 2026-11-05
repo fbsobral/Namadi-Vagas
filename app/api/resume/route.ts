@@ -2,6 +2,7 @@ import { getUserId } from "@/lib/auth";
 import { analyzeResume, CV_MAX_BYTES, CvError, fileContent } from "@/lib/resume";
 import { countCvs, createCv, getCv, MAX_CVS, rateLimit, saveCvAnalysis, updateCvMeta } from "@/lib/db";
 import { getAiConfig } from "@/lib/ai-config";
+import { scoreNote, startAiJob } from "@/lib/jobs";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 180;
@@ -32,19 +33,25 @@ export async function POST(req: Request) {
   if (target.length < 2) return Response.json({ error: "Diga primeiro o cargo-alvo deste currículo." }, { status: 400 });
 
   try {
+    // tudo que pode dar erro na hora (formato, tamanho, limite) é conferido antes de responder
+    const content = await fileContent({ name: file.name, type: file.type, buffer: Buffer.from(await file.arrayBuffer()) });
     const DAILY = (await getAiConfig()).features.resume.daily;
     await rateLimit("resume", userId, DAILY, 86400_000, `Limite de ${DAILY} análises de currículo por dia atingido. Tente amanhã.`);
-    const content = await fileContent({ name: file.name, type: file.type, buffer: Buffer.from(await file.arrayBuffer()) });
-    const { text, analysis } = await analyzeResume(content, target);
     const fileName = file.name.slice(0, 120);
-    if (existing) {
-      if (target !== existing.target_role) await updateCvMeta(userId, existing.id, target.slice(0, 60), target);
-      await saveCvAnalysis(existing.id, fileName, text, analysis);
-      return Response.json({ ok: true, id: existing.id });
-    }
-    // o nome do currículo é o próprio cargo-alvo
-    const id = await createCv(userId, { name: target.slice(0, 60), target_role: target, file_name: fileName, text, analysis });
-    return Response.json({ ok: true, id });
+    // a análise roda em segundo plano: a pessoa pode trocar de tela que o resultado fica guardado
+    const jobId = await startAiJob(userId, "resume", target, existing?.id ?? null, async () => {
+      const { text, analysis } = await analyzeResume(content, target);
+      if (existing) {
+        if (target !== existing.target_role) await updateCvMeta(userId, existing.id, target.slice(0, 60), target);
+        await saveCvAnalysis(existing.id, fileName, text, analysis);
+        return { id: existing.id, note: scoreNote(analysis.score, existing.analysis.score) };
+      }
+      if ((await countCvs(userId)) >= MAX_CVS) throw new Error(`Você já tem ${MAX_CVS} currículos.`);
+      // o nome do currículo é o próprio cargo-alvo
+      const id = await createCv(userId, { name: target.slice(0, 60), target_role: target, file_name: fileName, text, analysis });
+      return { id, note: scoreNote(analysis.score) };
+    });
+    return Response.json({ ok: true, jobId });
   } catch (e) {
     if (e instanceof CvError) return Response.json({ error: e.message }, { status: e.status });
     const msg = e instanceof Error ? e.message : "";

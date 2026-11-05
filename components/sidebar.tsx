@@ -42,15 +42,22 @@ export function Sidebar({ searches, counts, currentId, filter, view = "list", ro
         <button className="lg:hidden" onClick={() => setMobile(false)} aria-label="Fechar menu"><X className="size-5" /></button>
       </div>
 
-      <nav className="space-y-1 px-3" onClick={() => setMobile(false)}>
-        <NavItem href="/dashboard" active={allActive} icon={<Layers className="size-4" />} label="Todas as vagas" badge={counts.unseen} />
-        <NavItem href="/dashboard?v=board" active={boardActive} icon={<Columns3 className="size-4" />} label="Kanban" count={counts.favs} />
-        <NavItem href="/dashboard?f=fav" active={favActive} icon={<Star className="size-4" />} label="Favoritas" count={counts.favs} />
-        <NavItem href="/dashboard/curriculo" active={cvActive} icon={<FileText className="size-4" />} label="Currículo" />
-        <NavItem href="/dashboard/linkedin" active={liActive} icon={<LinkedinIcon />} label="Perfil do LinkedIn" />
+      {/* menu em seções: o app deixou de ser só vagas */}
+      <nav className="px-3" onClick={() => setMobile(false)} aria-label="Menu principal">
+        <Section>Vagas</Section>
+        <div className="space-y-0.5">
+          <NavItem href="/dashboard" active={allActive} icon={<Layers className="size-4" />} label="Todas as vagas" badge={counts.unseen} title="Tudo o que suas buscas encontraram" />
+          <NavItem href="/dashboard?f=fav" active={favActive} icon={<Star className="size-4" />} label="Vagas favoritas" count={counts.favs} title="As vagas que você marcou com estrela" />
+          <NavItem href="/dashboard?v=board" active={boardActive} icon={<Columns3 className="size-4" />} label="Candidaturas (Kanban)" count={counts.favs} title="Acompanhe cada candidatura por etapa" />
+        </div>
+        <Section className="mt-5">Seu perfil profissional</Section>
+        <div className="space-y-0.5">
+          <NavItem href="/dashboard/curriculo" active={cvActive} icon={<FileText className="size-4" />} label="Meus currículos" title="Um currículo por cargo, com nota e sugestões" />
+          <NavItem href="/dashboard/linkedin" active={liActive} icon={<LinkedinIcon />} label="Perfil do LinkedIn" title="Nota do perfil, títulos e Sobre prontos" />
+        </div>
       </nav>
 
-      <div className="mt-7 flex items-center justify-between px-5">
+      <div className="mt-5 flex items-center justify-between px-5">
         <p className="text-[11px] font-medium tracking-wider text-ink-3 uppercase">Minhas buscas</p>
         <button onClick={() => { setDialog(true); setMobile(false); }} className="grid size-7 place-items-center rounded-full bg-ink text-bg transition hover:bg-accent hover:text-accent-ink" aria-label="Nova busca"><Plus className="size-4" /></button>
       </div>
@@ -140,9 +147,13 @@ function SearchLink({ s, active, view }: { s: Search; active: boolean; view: "li
   );
 }
 
-function NavItem({ href, active, icon, label, count, badge }: { href: string; active: boolean; icon: React.ReactNode; label: string; count?: number; badge?: number }) {
+function Section({ children, className = "" }: { children: React.ReactNode; className?: string }) {
+  return <p className={`mb-1.5 px-2 text-[11px] font-medium tracking-wider text-ink-3 uppercase ${className}`}>{children}</p>;
+}
+
+function NavItem({ href, active, icon, label, count, badge, title }: { href: string; active: boolean; icon: React.ReactNode; label: string; count?: number; badge?: number; title?: string }) {
   return (
-    <Link href={href} className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition ${active ? "bg-surface font-medium shadow-card" : "text-ink-2 hover:bg-surface/60 hover:text-ink"}`}>
+    <Link href={href} title={title} aria-current={active ? "page" : undefined} className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition ${active ? "bg-surface font-medium shadow-card" : "text-ink-2 hover:bg-surface/60 hover:text-ink"}`}>
       <span className={active ? "text-accent" : ""}>{icon}</span>
       <span className="flex-1">{label}</span>
       {count !== undefined && count > 0 && <span className="font-mono text-xs text-ink-3">{count}</span>}

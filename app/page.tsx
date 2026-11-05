@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { auth } from "@clerk/nextjs/server";
 import {
-  ArrowUpRight, Bell, Bot, Check, ChevronDown, Copy, FileText, Funnel, GripVertical, History, Mail, RefreshCw, Search, Share2, ShieldCheck, Sparkles, Star,
+  ArrowUpRight, Bell, Bot, Building2, Check, ChevronDown, Copy, FileText, Funnel, GripVertical, History, Mail, RefreshCw, Search, Share2, ShieldCheck, Sparkles, Star,
 } from "lucide-react";
 import { Logo } from "@/components/logo";
 import { StickyCta } from "@/components/sticky-cta";
@@ -49,7 +49,7 @@ export default async function Home() {
             <a href="#como" className="rounded-full border border-line bg-surface px-6 py-4 font-medium transition hover:bg-surface-2 sm:py-3.5">Como funciona</a>
           </div>
           <ul className="anim-rise mx-auto mt-8 flex max-w-2xl flex-wrap justify-center gap-x-5 gap-y-2 text-[13px] text-ink-3" style={{ animationDelay: ".22s" }}>
-            {["Currículo com nota e IA", "% de compatibilidade por vaga", "Resumo por e-mail", "Busca em equipe", "Funciona no celular"].map((t) => (
+            {["Um currículo por cargo, com IA", "% de compatibilidade em cada vaga", "Perfil do LinkedIn otimizado", "Filtro por tipo de empresa", "Busca em equipe", "Funciona no celular"].map((t) => (
               <li key={t} className="inline-flex items-center gap-1.5"><Check className="size-3.5 text-accent" />{t}</li>
             ))}
           </ul>
@@ -63,9 +63,9 @@ export default async function Home() {
             text="Você configura uma vez. Depois é só abrir o painel (ou o e-mail) para ver o que chegou." />
           <ol className="mt-12 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
             {[
-              { i: Search, t: "Diga o que procura", d: "Cargos combinados com E/OU, local, fontes e o que excluir. Ou envie o currículo e a IA sugere a busca pronta para você revisar." },
+              { i: Search, t: "Diga o que procura", d: "Cargos combinados com E/OU, local, fontes, o que excluir e até o tipo de empresa: B2B ou B2C, setor e porte." },
               { i: Bot, t: "O robô vigia por você", d: "Na frequência que você escolher, ele lê LinkedIn, Gupy e o Google, descarta repetidas e marca como NOVA só o que é inédito." },
-              { i: FileText, t: "Veja o quanto combina", d: "Tenha um currículo para cada objetivo, com nota e sugestões. Cada busca compara as vagas com o currículo certo e mostra a % de compatibilidade." },
+              { i: FileText, t: "Veja o quanto combina", d: "Tenha um currículo para cada cargo-alvo. Cada vaga nova já chega com a % de compatibilidade com o currículo daquela busca." },
               { i: Star, t: "Favorite e avance", d: "Cada favorita ganha contatos no LinkedIn, carta de apresentação e um lugar no seu Kanban de candidaturas." },
             ].map(({ i: Icon, t, d }, n) => (
               <li key={t} className="relative rounded-3xl border border-line bg-surface p-6 shadow-card sm:p-7">
@@ -117,6 +117,15 @@ export default async function Home() {
             </Feature>
 
             <Feature className="md:col-span-2" icon={Funnel} title="Filtro que não esconde" text="Vagas barradas pela descrição vão para a aba Filtradas, com o motivo. Discordou? “Manter na lista” e pronto: nada é apagado." />
+
+            <Feature className="md:col-span-6" icon={Building2} title="Só as empresas que você quer" text="Segmente cada busca por modelo de negócio (B2B, B2C ou B2B2C), porte e setor. A IA classifica cada empresa uma vez; vagas fora do segmento vão para Filtradas, com o motivo, e o cartão mostra as etiquetas da empresa.">
+              <div className="mt-5 flex flex-wrap items-center gap-1.5 text-sm">
+                {[["B2B", true], ["B2C", false], ["Média", true], ["Grande", true], ["Fintech", true], ["Software e SaaS", true], ["Varejo", false]].map(([t, on]) => (
+                  <span key={t as string} className={`rounded-full border px-3 py-1.5 ${on ? "border-ink bg-ink text-bg" : "border-line text-ink-2"}`}>{t as string}</span>
+                ))}
+                <span className="ml-1 rounded-full bg-accent-soft px-3 py-1.5 text-xs text-accent">Filtrada · segmento: empresa B2C</span>
+              </div>
+            </Feature>
 
             <Feature className="md:col-span-3" icon={Mail} title="Resumo por e-mail" text="A cada rodada com vaga nova ou um resumo diário às 8h, por busca. Tem e-mail de teste e link para parar de receber em cada envio.">
               <div className="mt-5 rounded-2xl border border-line bg-bg/60 p-3.5 text-sm">
@@ -233,6 +242,8 @@ const FAQ: [string, string][] = [
   ["Vou receber vaga repetida?", "Não. O robô lembra o que já encontrou e só grava vagas inéditas, que aparecem com o selo NOVA até você abrir."],
   ["Como funciona a parte dos contatos?", "Ao favoritar uma vaga, o robô procura perfis públicos do LinkedIn ligados à empresa e separa em recrutamento, liderança e pessoas do time, cada um com uma mensagem sugerida para copiar."],
   ["Meu currículo fica guardado?", "No “Preencher com meu currículo” da busca, não: o arquivo é lido na hora e descartado. Na área Currículo, você escolhe guardar o texto (nunca o arquivo) para aceitar sugestões e comparar com as vagas, e apaga tudo quando quiser."],
+  ["Posso ter mais de um currículo?", "Sim, até 5, um para cada cargo-alvo. Você informa o cargo antes da análise, pode pedir para a IA adaptar um currículo existente para outro cargo e escolhe em cada busca qual currículo comparar com as vagas."],
+  ["Dá para buscar só em empresas B2B, de um setor ou porte?", "Sim. Ao criar ou editar a busca, use “Segmentar empresas”: modelo de negócio, porte e setor. A IA classifica cada empresa uma vez, e as vagas fora do segmento vão para Filtradas, sem apagar nada."],
   ["Como funciona a nota do currículo?", "A IA avalia abrangência, estrutura, clareza, impacto e leitura por sistemas de triagem (ATS), dá uma nota de 0 a 100 e sugere melhorias seção por seção. Ela não inventa experiência: quando falta um dado, marca o lugar para você completar."],
   ["Quem vê uma busca compartilhada?", "Só quem você convidar por e-mail e entrar com esse mesmo e-mail. Cada pessoa tem favoritas, Kanban e e-mails próprios. Ao convidar, você escolhe o nível: pode ver, pode editar ou pode gerenciar (também convida pessoas). Só quem criou pode excluir a busca."],
   ["Vocês acessam meu LinkedIn?", "Não. Para as sugestões de perfil, você envia o PDF que o próprio LinkedIn gera (Mais › Salvar como PDF) ou cola o texto. Guardamos só o texto e você apaga quando quiser."],
@@ -269,9 +280,9 @@ function Op({ children, strong }: { children: React.ReactNode; strong?: boolean 
 
 function Preview() {
   const jobs = [
-    { c: "Nubank", t: "Product Designer Sênior", m: "Remoto · Brasil", s: "LinkedIn", col: "#A855F7", fav: true, n: true, fit: 96 },
-    { c: "QuintoAndar", t: "Design Lead, Growth", m: "São Paulo, SP", s: "Google aberto", col: "#2F6BFF", n: true, fit: 74 },
-    { c: "Hotmart", t: "UX Researcher Pleno", m: "Belo Horizonte, MG", s: "Gupy", col: "#14A37F", fit: 0 },
+    { c: "Nubank", t: "Product Designer Sênior", m: "Remoto · Brasil", s: "LinkedIn", col: "#A855F7", fav: true, n: true, fit: 96, seg: "B2C · Fintech · Grande" },
+    { c: "QuintoAndar", t: "Design Lead, Growth", m: "São Paulo, SP", s: "Google aberto", col: "#2F6BFF", n: true, fit: 74, seg: "" },
+    { c: "Hotmart", t: "UX Researcher Pleno", m: "Belo Horizonte, MG", s: "Gupy", col: "#14A37F", fit: 0, seg: "" },
   ];
   return (
     <div className="anim-rise relative mx-auto max-w-5xl px-4 sm:px-5" style={{ animationDelay: ".28s" }}>
@@ -308,7 +319,7 @@ function Preview() {
                 <span className="grid size-10 shrink-0 place-items-center rounded-xl text-sm font-semibold text-white sm:size-11" style={{ background: j.col }}>{j.c.slice(0, 2).toUpperCase()}</span>
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium sm:text-base">{j.t} {j.n && <span className="ml-1 rounded-full bg-accent-soft px-2 py-0.5 text-[10px] font-semibold text-accent">NOVA</span>}</p>
-                  <p className="truncate text-xs text-ink-3 sm:text-sm">{j.c} · {j.m} · {j.s}</p>
+                  <p className="truncate text-xs text-ink-3 sm:text-sm">{j.c} · {j.m} · {j.s}{j.seg ? <span className="hidden sm:inline"> · {j.seg}</span> : null}</p>
                 </div>
                 {j.fit > 0 && <span className={`hidden shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold sm:inline ${j.fit >= 85 ? "bg-ok text-white" : "bg-ok-soft text-ok"}`}>{j.fit}% compatível</span>}
                 <Star className={`size-5 shrink-0 ${j.fav ? "fill-accent text-accent" : "text-ink-3"}`} />
@@ -489,14 +500,14 @@ function ResumeSection() {
   return (
     <section id="curriculo" className="mx-auto max-w-6xl scroll-mt-24 px-4 pt-24 sm:px-5 sm:pt-28">
       <SectionHead kicker="Currículo com IA" title={<>Mais entrevistas com um <em className="text-accent">currículo melhor</em>.</>}
-        text="Tenha um currículo para cada objetivo. A IA dá uma nota para o cargo que você quer, sugere melhorias e compara com cada vaga que o robô encontrar." />
+        text="Diga o cargo que você quer e envie o currículo: a IA dá a nota para aquele cargo, sugere melhorias e compara com cada vaga que o robô encontrar." />
 
       <div className="mt-12 grid gap-4 md:grid-cols-2">
         <article className="min-w-0 rounded-3xl border border-line bg-surface p-6 shadow-card sm:p-8">
           <span className="rounded-full border border-accent/40 bg-accent-soft px-3 py-1 text-[11px] font-semibold tracking-wider text-accent uppercase">Pontuação</span>
-          <h3 className="font-display mt-4 text-[2rem] leading-tight">Nota do currículo</h3>
+          <h3 className="font-display mt-4 text-[2rem] leading-tight">Nota para o cargo que você quer</h3>
           <div className="mt-5 rounded-2xl border border-line bg-bg/60 p-4 shadow-card sm:p-5">
-            <p className="text-xs text-ink-3">Pontuação do currículo</p>
+            <p className="text-xs text-ink-3">Pontuação para <strong className="font-medium text-ink-2">Product Designer Sênior</strong></p>
             <div className="mt-3 flex items-center gap-4"><ScoreRing value={87} size={64} /><div><p className="font-semibold">Muito bom</p><p className="text-xs text-ink-3">Falta mostrar resultados em números</p></div></div>
             <div className="mt-4 space-y-3">
               {[["Abrangência", 92], ["Estrutura", 85], ["Clareza", 78]].map(([l, v]) => (
@@ -504,7 +515,7 @@ function ResumeSection() {
               ))}
             </div>
           </div>
-          <p className="mt-5 text-ink-2">Uma avaliação na hora, com o que recrutadores e sistemas de triagem (ATS) procuram, e o que fazer para melhorar.</p>
+          <p className="mt-5 text-ink-2">Primeiro o cargo-alvo, depois a análise: abrangência, estrutura, clareza, impacto e leitura por sistemas de triagem (ATS), medidos para aquele cargo.</p>
         </article>
 
         <article className="min-w-0 rounded-3xl border border-line bg-surface p-6 shadow-card sm:p-8">
@@ -521,20 +532,53 @@ function ResumeSection() {
               <p className="rounded-lg bg-surface-2 px-2.5 py-1.5 text-ink-3 line-through decoration-accent/50">Responsável pelo design do app</p>
               <p className="mt-1.5 rounded-lg bg-ok-soft px-2.5 py-1.5">Redesenhei o checkout do app e reduzi o abandono em [X%]</p>
             </div>
+            <p className="flex justify-end"><span className="max-w-[85%] rounded-2xl rounded-br-md bg-ink px-3 py-2 text-sm text-bg">Foi 30% em 6 meses</span></p>
             <p className="flex items-center gap-2">
-              <span className="grid size-7 shrink-0 place-items-center rounded-full bg-ok text-white"><Check className="size-3.5" /></span>
-              <span className="rounded-2xl rounded-tl-md bg-surface-2 px-3 py-2 text-sm">Aceito! Currículo atualizado 🎉</span>
+              <span className="grid size-7 shrink-0 place-items-center rounded-full bg-ink text-bg"><Sparkles className="size-3.5" /></span>
+              <span className="rounded-2xl rounded-tl-md bg-surface-2 px-3 py-2 text-sm">Troquei o [X%] por 30% e incluí o prazo.</span>
             </p>
+            <p className="ml-9 inline-flex items-center gap-1.5 rounded-full border border-accent bg-accent-soft px-3 py-1.5 text-xs font-medium text-accent"><Sparkles className="size-3.5" /> Refinar com a IA</p>
           </div>
-          <p className="mt-5 text-ink-2">Aceite, edite ou ignore cada sugestão. A IA nunca inventa experiência: quando falta um número, ela marca o lugar para você completar.</p>
+          <p className="mt-5 text-ink-2">Aceite, edite ou toque em <strong className="font-medium text-ink">Refinar com a IA</strong> para contar o que ela não sabe. Ela nunca inventa experiência: quando falta um número, marca o lugar para você completar.</p>
         </article>
 
         <article className="min-w-0 rounded-3xl border border-line bg-surface p-6 shadow-card sm:p-8 md:col-span-2">
-          <div className="grid items-center gap-8 md:grid-cols-[1fr_1.1fr]">
+          <div className="grid grid-cols-[minmax(0,1fr)] items-center gap-8 md:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
+            <div>
+              <span className="rounded-full border border-accent/40 bg-accent-soft px-3 py-1 text-[11px] font-semibold tracking-wider text-accent uppercase">Um currículo por cargo</span>
+              <h3 className="font-display mt-4 text-[2rem] leading-tight">Uma versão para cada objetivo</h3>
+              <p className="mt-3 text-ink-2">Tenha até 5 currículos, um para cada cargo-alvo. Crie enviando outro arquivo ou peça para a IA <strong className="font-medium text-ink">adaptar um existente</strong> para o novo cargo, sem inventar nada. Em cada busca, escolha qual currículo comparar com as vagas.</p>
+            </div>
+            <div className="space-y-3">
+              <div className="flex flex-wrap gap-2">
+                {[["Head de Growth", 84, true], ["Product Manager", 71, false]].map(([t, v, on]) => (
+                  <span key={t as string} className={`inline-flex items-center gap-2.5 rounded-2xl border bg-surface py-2 pr-4 pl-2 ${on ? "border-ink shadow-card" : "border-line"}`}>
+                    <ScoreRing value={v as number} size={36} />
+                    <span><span className="block text-sm font-semibold">{t as string}</span><span className="block text-xs text-ink-3">{on ? "principal · " : ""}nota {v as number}</span></span>
+                  </span>
+                ))}
+                <span className="inline-flex items-center gap-1.5 rounded-2xl border border-dashed border-line px-4 py-2 text-sm text-ink-2"><Sparkles className="size-4 text-accent" /> Adaptar para outro cargo</span>
+              </div>
+              <div className="rounded-2xl border border-line bg-bg/60 p-4">
+                <p className="text-sm font-semibold">Busca: Product · São Paulo</p>
+                <span className="mt-2 inline-flex items-center gap-2 rounded-full border border-accent bg-accent-soft px-3.5 py-1.5 text-sm font-medium text-accent"><FileText className="size-4" /> Currículo: Product Manager</span>
+                <p className="mt-2 text-xs text-ink-3">As notas das vagas desta busca usam este currículo.</p>
+              </div>
+            </div>
+          </div>
+        </article>
+
+        <article className="min-w-0 rounded-3xl border border-line bg-surface p-6 shadow-card sm:p-8 md:col-span-2">
+          <div className="grid grid-cols-[minmax(0,1fr)] items-center gap-8 md:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
             <div>
               <span className="rounded-full border border-accent/40 bg-accent-soft px-3 py-1 text-[11px] font-semibold tracking-wider text-accent uppercase">Em cada vaga</span>
               <h3 className="font-display mt-4 text-[2rem] leading-tight">Compatibilidade, currículo adaptado e carta</h3>
-              <p className="mt-3 text-ink-2">Abra uma vaga e veja a % de compatibilidade, os requisitos que você atende e os que faltam. Copie o resumo reescrito para aquela vaga e gere uma carta de apresentação em segundos.</p>
+              <p className="mt-3 text-ink-2">Cada vaga nova já chega com a % de compatibilidade no cartão. Ordene por “Mais compatíveis”, filtre por Top match ou verifique as antigas todas de uma vez. Abra a vaga para ver o que falta, copiar o resumo reescrito e gerar a carta.</p>
+              <div className="mt-4 flex flex-wrap gap-1.5 text-xs">
+                <span className="rounded-full bg-ink px-3 py-1.5 text-bg">Mais compatíveis</span>
+                <span className="rounded-full border border-ok/50 bg-ok-soft px-3 py-1.5 font-medium text-ok">Top match (85+)</span>
+                <span className="rounded-full border border-line bg-surface px-3 py-1.5 text-ink-2">Verificar as que faltam</span>
+              </div>
             </div>
             <div className="flex flex-col items-stretch gap-3 sm:flex-row">
               <div className="flex flex-1 flex-col items-center rounded-2xl border border-ok/40 bg-ok-soft/50 p-5 text-center">
@@ -554,7 +598,7 @@ function ResumeSection() {
         </article>
 
         <article className="min-w-0 rounded-3xl border border-line bg-surface p-6 shadow-card sm:p-8 md:col-span-2">
-          <div className="grid items-center gap-6 md:grid-cols-[1fr_1.1fr]">
+          <div className="grid grid-cols-[minmax(0,1fr)] items-center gap-6 md:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
             <div>
               <span className="rounded-full border border-[#0a66c2]/30 bg-[#0a66c2]/10 px-3 py-1 text-[11px] font-semibold tracking-wider text-[#0a66c2] uppercase">Perfil do LinkedIn</span>
               <h3 className="font-display mt-4 text-[2rem] leading-tight">Seja encontrado pelos recrutadores certos</h3>

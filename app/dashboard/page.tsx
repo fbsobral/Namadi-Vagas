@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { getUserId, getViewer, isAdminViewer } from "@/lib/auth";
 import { aiFlags } from "@/lib/ai-config";
 import { AiFlagsProvider } from "@/components/ai-flags";
+import { BackgroundJobs } from "@/components/background-jobs";
 import { UserButton } from "@clerk/nextjs";
 import { AlertTriangle, Columns3, LayoutList, Radar as RadarIcon, Star } from "lucide-react";
 import { type FitFilter, boardCounts, filteredCount, getJob, getJobFit, getKv, getSeenGuides, listCvs, searchCvMap, pendingInvitesFor, jobCounts, listContacts, listJobs, listRuns, listSearches, type JobFilter } from "@/lib/db";
@@ -78,7 +79,7 @@ export default async function Dashboard({ searchParams }: PageProps<"/dashboard"
 
   // atualiza sozinha enquanto o robô busca, e também logo após criar uma busca (a 1ª rodada começa depois do redirecionamento)
   const anyRunning = searches.some((s) => s.last_status === "running" || (s.active === 1 && s.last_run_at == null && isFresh(s.created_at, 5 * 60_000)));
-  const title = current ? current.name : view === "board" ? "Kanban" : filter === "fav" ? "Favoritas" : "Todas as vagas";
+  const title = current ? current.name : view === "board" ? "Candidaturas" : filter === "fav" ? "Vagas favoritas" : "Todas as vagas";
   const sources = current ? (JSON.parse(current.sources) as string[]) : [];
   const myRole = current ? (current.is_owner === false ? current.my_role ?? "viewer" : "owner") : null;
   const guide = view === "board" ? "board" : current?.is_owner === false ? "shared" : "list";
@@ -87,6 +88,7 @@ export default async function Dashboard({ searchParams }: PageProps<"/dashboard"
 
   return (
     <AiFlagsProvider flags={flags}>
+    <BackgroundJobs>
     <OnboardingProvider seen={seenGuides} hasSearches={searches.length > 0}>
     <div className="relative z-10 flex min-h-dvh flex-col lg:flex-row">
       <AutoRefresh active={anyRunning} />
@@ -190,6 +192,7 @@ export default async function Dashboard({ searchParams }: PageProps<"/dashboard"
       {drawerJob && <JobDrawer job={drawerJob} contacts={contacts} closeHref={base()} terms={drawerSearch ? includeTerms(parseSpec(drawerSearch.query_spec, drawerSearch.query)) : []} cvs={cvs} cvId={drawerJob.cv_id ?? null} fit={fit} />}
     </div>
     </OnboardingProvider>
+    </BackgroundJobs>
     </AiFlagsProvider>
   );
 }

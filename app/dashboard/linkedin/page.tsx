@@ -7,6 +7,7 @@ import { isFresh } from "@/lib/format";
 import { Sidebar } from "@/components/sidebar";
 import { OnboardingProvider } from "@/components/onboarding";
 import { AiFlagsProvider } from "@/components/ai-flags";
+import { BackgroundJobs } from "@/components/background-jobs";
 import { HelpButton } from "@/components/guide";
 import { LinkedinModule } from "@/components/linkedin-module";
 
@@ -23,6 +24,7 @@ export default async function LinkedinPage() {
 
   return (
     <AiFlagsProvider flags={flags}>
+    <BackgroundJobs>
       <OnboardingProvider seen={seenGuides} hasSearches={searches.length > 0}>
         <div className="relative z-10 flex min-h-dvh flex-col lg:flex-row">
           <Sidebar searches={searches} counts={counts} currentId={null} filter="all" view="li" robotOnline={isFresh(beat?.updated_at, 3 * 60_000)} isAdmin={isAdminViewer(viewer)}>
@@ -47,6 +49,7 @@ export default async function LinkedinPage() {
           </main>
         </div>
       </OnboardingProvider>
+    </BackgroundJobs>
     </AiFlagsProvider>
   );
 }

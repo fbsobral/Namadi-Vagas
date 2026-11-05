@@ -10,6 +10,7 @@ import { timeAgo } from "@/lib/format";
 import { Bar, ScoreRing } from "./score-ring";
 import { ModuleTip } from "./guide";
 import { useAiFlags } from "./ai-flags";
+import { useJobs } from "./background-jobs";
 
 export function LinkedinModule({ profile, targets, configured }: { profile: LinkedinProfile | null; targets: string[]; configured: boolean }) {
   return profile ? <Loaded p={profile} targets={targets} configured={configured} /> : <Empty targets={targets} configured={configured} />;
@@ -45,7 +46,8 @@ function TargetInput({ value, onChange, targets, step }: { value: string; onChan
 }
 
 function Uploader({ targets, configured, initialTarget = "", compact }: { targets: string[]; configured: boolean; initialTarget?: string; compact?: boolean }) {
-  const router = useRouter();
+  const jobs = useJobs();
+  const working = !!jobs?.busy("linkedin");
   const input = useRef<HTMLInputElement>(null);
   const [target, setTarget] = useState(initialTarget);
   const [paste, setPaste] = useState("");
@@ -63,22 +65,22 @@ function Uploader({ targets, configured, initialTarget = "", compact }: { target
       if (fields.text) body.set("text", fields.text);
       if (target.trim()) body.set("target", target.trim());
       const res = await fetch("/api/linkedin", { method: "POST", body });
-      const json = (await res.json().catch(() => null)) as { error?: string } | null;
-      if (!res.ok || json?.error) throw new Error(json?.error ?? "Não consegui analisar o perfil.");
+      const json = (await res.json().catch(() => null)) as { error?: string; jobId?: string } | null;
+      if (!res.ok || json?.error || !json?.jobId) throw new Error(json?.error ?? "Não consegui analisar o perfil.");
       setPaste(""); setShowPaste(false);
-      router.refresh();
+      jobs?.track(json.jobId); // segue em segundo plano: pode trocar de tela
     } catch (e) { setErr(e instanceof Error ? e.message : "Não consegui analisar o perfil."); } finally { setBusy(null); }
   };
   return (
     <div className="space-y-4">
       {!compact && <TargetInput value={target} onChange={setTarget} targets={targets} step />}
-      {!compact && <p className="-mb-2 text-sm font-medium"><span className="mr-1.5 inline-grid size-5 place-items-center rounded-full bg-[#0a66c2] text-[11px] font-bold text-white">2</span>Envie o perfil</p>}
-      <button type="button" disabled={!!busy || !configured || needTarget} onClick={() => input.current?.click()}
+      {!compact && <p className="text-sm font-medium"><span className="mr-1.5 inline-grid size-5 place-items-center rounded-full bg-[#0a66c2] text-[11px] font-bold text-white">2</span>Envie o perfil</p>}
+      <button type="button" disabled={!!busy || working || !configured || needTarget} onClick={() => input.current?.click()}
         className={`flex w-full items-center gap-4 rounded-3xl border-2 border-dashed border-line bg-surface text-left transition hover:border-accent/60 disabled:cursor-not-allowed ${compact ? "p-4" : "p-5 sm:p-7"}`}>
-        <span className="grid size-12 shrink-0 place-items-center rounded-2xl bg-[#0a66c2] text-white">{busy ? <Loader2 className="spin size-6" /> : <Upload className="size-6" />}</span>
+        <span className="grid size-12 shrink-0 place-items-center rounded-2xl bg-[#0a66c2] text-white">{busy || working ? <Loader2 className="spin size-6" /> : <Upload className="size-6" />}</span>
         <span className="min-w-0">
-          <span className="block font-semibold">{busy ? `Analisando ${busy}…` : compact ? "Enviar o perfil de novo" : "Envie o PDF do seu perfil"}</span>
-          <span className="block text-sm text-ink-3">{busy ? "Leva uns 30 segundos." : needTarget ? "Primeiro diga o cargo, acima." : "No LinkedIn, abra seu perfil › Mais › Salvar como PDF. Depois toque aqui."}</span>
+          <span className="block font-semibold">{busy ? `Enviando ${busy}…` : working ? "Analisando em segundo plano…" : compact ? "Enviar o perfil de novo" : "Envie o PDF do seu perfil"}</span>
+          <span className="block text-sm text-ink-3">{busy || working ? "Leva uns 30 segundos. Pode trocar de tela: avisamos quando terminar." : needTarget ? "Primeiro diga o cargo, acima." : "No LinkedIn, abra seu perfil › Mais › Salvar como PDF. Depois toque aqui."}</span>
         </span>
       </button>
       <input ref={input} type="file" hidden accept=".pdf,.docx,.txt,application/pdf" onChange={(e) => { const f = e.target.files?.[0]; if (f) send({ file: f }); e.target.value = ""; }} />
@@ -122,6 +124,8 @@ function Empty({ targets, configured }: { targets: string[]; configured: boolean
 
 function Loaded({ p, targets, configured }: { p: LinkedinProfile; targets: string[]; configured: boolean }) {
   const router = useRouter();
+  const jobs = useJobs();
+  const analyzing = !!jobs?.busy("linkedin");
   const a = p.analysis;
   const [target, setTarget] = useState(p.target_role);
   const [pending, start] = useTransition();
@@ -135,9 +139,7 @@ function Loaded({ p, targets, configured }: { p: LinkedinProfile; targets: strin
     setMsg(null);
     const r = await reanalyzeLinkedinAction(target);
     if (!r.ok) return setMsg({ ok: false, text: r.error });
-    const diff = r.data.score - r.data.before;
-    setMsg({ ok: true, text: diff ? `Nova nota: ${r.data.score} (${diff > 0 ? "+" : ""}${diff}).` : `Nota: ${r.data.score}.` });
-    router.refresh();
+    jobs?.track(r.data.jobId); // a nova nota chega pelo aviso, mesmo se você trocar de tela
   });
 
   return (
@@ -165,8 +167,8 @@ function Loaded({ p, targets, configured }: { p: LinkedinProfile; targets: strin
           <div className="rounded-3xl border border-line bg-surface p-5 shadow-card">
             <TargetInput value={target} onChange={setTarget} targets={targets} />
             <div className="mt-4 flex flex-wrap gap-2">
-              <button disabled={pending || !configured || target.trim().length < 2} onClick={reanalyze} className="inline-flex min-h-10 items-center gap-2 rounded-full bg-ink px-4 text-sm font-medium text-bg disabled:opacity-50">
-                <RefreshCw className={`size-4 ${pending ? "spin" : ""}`} /> {pending ? "Analisando…" : target.trim() !== p.target_role ? "Analisar para este cargo" : "Reanalisar"}
+              <button disabled={pending || analyzing || !configured || target.trim().length < 2} onClick={reanalyze} className="inline-flex min-h-10 items-center gap-2 rounded-full bg-ink px-4 text-sm font-medium text-bg disabled:opacity-50">
+                <RefreshCw className={`size-4 ${pending || analyzing ? "spin" : ""}`} /> {pending || analyzing ? "Analisando…" : target.trim() !== p.target_role ? "Analisar para este cargo" : "Reanalisar"}
               </button>
               {confirm ? (
                 <span className="anim-pop inline-flex items-center gap-1 rounded-full border border-accent bg-accent-soft py-1 pr-1 pl-3 text-sm text-accent">
