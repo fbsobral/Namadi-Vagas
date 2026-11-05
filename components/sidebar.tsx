@@ -15,7 +15,7 @@ type Props = {
   counts: { total: number; unseen: number; favs: number };
   currentId: string | null;
   filter: string;
-  view?: "list" | "board" | "cv";
+  view?: "list" | "board" | "cv" | "li";
   robotOnline?: boolean;
   isAdmin?: boolean;
   children: React.ReactNode; // UserButton
@@ -25,13 +25,14 @@ export function Sidebar({ searches, counts, currentId, filter, view = "list", ro
   const [mobile, setMobile] = useState(false);
   const [dialog, setDialog] = useState(false);
   const guides = useGuides();
-  const unseenGuides = guides ? (["welcome", "search", "list", "job", "board", "share", "resume"] as const).filter((g) => guideState(guides.seen, g) !== "seen").length : 0;
+  const unseenGuides = guides ? (["welcome", "search", "list", "job", "board", "share", "resume", "linkedin"] as const).filter((g) => guideState(guides.seen, g) !== "seen").length : 0;
   const mine = searches.filter((s) => s.is_owner !== false);
   const shared = searches.filter((s) => s.is_owner === false);
   const allActive = !currentId && view === "list" && filter !== "fav";
   const favActive = !currentId && view === "list" && filter === "fav";
   const boardActive = !currentId && view === "board";
   const cvActive = view === "cv";
+  const liActive = view === "li";
 
   const nav = (
     <div className="flex h-full flex-col">
@@ -45,6 +46,7 @@ export function Sidebar({ searches, counts, currentId, filter, view = "list", ro
         <NavItem href="/dashboard?v=board" active={boardActive} icon={<Columns3 className="size-4" />} label="Kanban" count={counts.favs} />
         <NavItem href="/dashboard?f=fav" active={favActive} icon={<Star className="size-4" />} label="Favoritas" count={counts.favs} />
         <NavItem href="/dashboard/curriculo" active={cvActive} icon={<FileText className="size-4" />} label="Currículo" />
+        <NavItem href="/dashboard/linkedin" active={liActive} icon={<span className="grid size-4 place-items-center rounded-[3px] bg-[#0a66c2] text-[9px] leading-none font-extrabold text-white">in</span>} label="Perfil do LinkedIn" />
       </nav>
 
       <div className="mt-7 flex items-center justify-between px-5">
@@ -119,7 +121,7 @@ export function Sidebar({ searches, counts, currentId, filter, view = "list", ro
   );
 }
 
-function SearchLink({ s, active, view }: { s: Search; active: boolean; view: "list" | "board" | "cv" }) {
+function SearchLink({ s, active, view }: { s: Search; active: boolean; view: "list" | "board" | "cv" | "li" }) {
   const running = s.last_status === "running";
   const sharedWithMe = s.is_owner === false;
   return (

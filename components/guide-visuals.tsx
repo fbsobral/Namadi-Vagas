@@ -618,6 +618,36 @@ const V: Record<VisualKey, () => React.ReactNode> = {
       </div>
     </Frame>
   ),
+
+  linkedinScore: () => (
+    <Frame>
+      <Screen>
+        <div className="flex items-center gap-2"><span className="rounded bg-[#0a66c2] px-1 text-[9px] leading-[14px] font-extrabold text-white">in</span><p className="text-[10.5px] font-semibold">Nota do perfil · Head de Growth</p></div>
+        <div className="mt-2 flex items-center gap-3"><ScoreRing value={68} size={50} /><div><p className="text-[12px] font-semibold">Regular</p><p className="text-[9.5px] text-ink-3">Título genérico e Sobre sem resultados</p></div></div>
+        <div className="mt-2 space-y-1.5">
+          {[["Título", 45], ["Sobre", 60], ["Encontrabilidade", 72]].map(([l, v], k) => (
+            <div key={l as string} className="anim-pop" style={d(0.2 + k * 0.12)}><div className="mb-0.5 flex justify-between text-[9.5px]"><span>{l as string}</span><span className="text-ink-3">{v as number}%</span></div><Bar value={v as number} /></div>
+          ))}
+        </div>
+      </Screen>
+    </Frame>
+  ),
+
+  linkedinHeadline: () => (
+    <Frame>
+      <Screen className="space-y-1.5">
+        <p className="text-[10.5px] font-semibold">3 opções de título</p>
+        {["Head de Growth | Aquisição, CRO e Experimentação | Fintech", "Growth que transforma dados em receita · ex-Nubank", "Liderança de Growth para produtos digitais B2C"].map((h, k) => (
+          <div key={h} className="anim-pop flex items-center gap-1.5 rounded-lg border border-line bg-bg/70 p-1.5" style={d(k * 0.15)}>
+            <span className="grid size-4 shrink-0 place-items-center rounded-full bg-[#0a66c2]/10 text-[8px] font-bold text-[#0a66c2]">{k + 1}</span>
+            <span className="flex-1 truncate text-[9.5px] font-medium">{h}</span>
+            <span className="font-mono text-[8px] text-ink-3">{h.length}/220</span>
+            <span className={`rounded-full border border-line px-1.5 text-[8.5px] ${k === 0 ? "g-press" : ""}`}><Copy className="inline size-2.5" /></span>
+          </div>
+        ))}
+      </Screen>
+    </Frame>
+  ),
 };
 
 function KanbanMini({ select = false }: { select?: boolean }) {

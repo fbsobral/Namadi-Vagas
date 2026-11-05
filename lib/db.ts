@@ -5,6 +5,7 @@ import { safeUrl } from "./safe-url";
 import { isMemberRole, type MemberRole, type Role } from "./roles";
 import type { Contact, Job, Search } from "./types";
 import type { JobFit, JobFitRow, Resume, ResumeAnalysis } from "./resume-shared";
+import type { LinkedinAnalysis, LinkedinProfile } from "./linkedin-shared";
 import { randomUUID as uuid } from "node:crypto";
 
 // BIGINT (timestamps em ms) e COUNT() voltam como número em vez de string.
@@ -215,6 +216,18 @@ CREATE TABLE IF NOT EXISTS search_cv (
   user_id TEXT NOT NULL,
   cv_id TEXT NOT NULL REFERENCES cvs(id) ON DELETE CASCADE,
   PRIMARY KEY (search_id, user_id)
+);
+
+-- perfil do LinkedIn da pessoa (texto do PDF exportado ou colado) e a análise
+CREATE TABLE IF NOT EXISTS linkedin_profiles (
+  user_id TEXT PRIMARY KEY,
+  text TEXT NOT NULL,
+  target_role TEXT NOT NULL DEFAULT '',
+  file_name TEXT NOT NULL DEFAULT '',
+  analysis TEXT NOT NULL,
+  created_at BIGINT NOT NULL,
+  updated_at BIGINT NOT NULL,
+  analyzed_at BIGINT NOT NULL
 );
 
 -- preferências da pessoa
@@ -1019,3 +1032,27 @@ export const jobsForSegments = (searchId: string) =>
   );
 
 export const unfilterJob = (id: string) => run("UPDATE jobs SET filtered = 0, filtered_reason = NULL WHERE id = ?", id);
+
+/* ---------- perfil do LinkedIn ---------- */
+
+type LiRow = Omit<LinkedinProfile, "analysis"> & { analysis: string };
+
+export async function getLinkedin(userId: string): Promise<LinkedinProfile | null> {
+  const r = await get<LiRow>("SELECT * FROM linkedin_profiles WHERE user_id = ?", userId);
+  return r ? { ...r, analysis: JSON.parse(r.analysis) as LinkedinAnalysis } : null;
+}
+
+export async function saveLinkedin(userId: string, p: { text: string; target_role: string; file_name: string; analysis: LinkedinAnalysis }) {
+  const now = Date.now();
+  await run(
+    `INSERT INTO linkedin_profiles (user_id, text, target_role, file_name, analysis, created_at, updated_at, analyzed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT (user_id) DO UPDATE SET text = EXCLUDED.text, target_role = EXCLUDED.target_role, file_name = EXCLUDED.file_name,
+       analysis = EXCLUDED.analysis, updated_at = EXCLUDED.updated_at, analyzed_at = EXCLUDED.analyzed_at`,
+    userId, p.text, p.target_role, p.file_name, JSON.stringify(p.analysis), now, now, now,
+  );
+}
+
+export const updateLinkedinAnalysis = (userId: string, analysis: LinkedinAnalysis) =>
+  run("UPDATE linkedin_profiles SET analysis = ?, updated_at = ? WHERE user_id = ?", JSON.stringify(analysis), Date.now(), userId);
+
+export const deleteLinkedin = (userId: string) => run("DELETE FROM linkedin_profiles WHERE user_id = ?", userId);

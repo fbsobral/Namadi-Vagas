@@ -235,6 +235,7 @@ const FAQ: [string, string][] = [
   ["Meu currículo fica guardado?", "No “Preencher com meu currículo” da busca, não: o arquivo é lido na hora e descartado. Na área Currículo, você escolhe guardar o texto (nunca o arquivo) para aceitar sugestões e comparar com as vagas, e apaga tudo quando quiser."],
   ["Como funciona a nota do currículo?", "A IA avalia abrangência, estrutura, clareza, impacto e leitura por sistemas de triagem (ATS), dá uma nota de 0 a 100 e sugere melhorias seção por seção. Ela não inventa experiência: quando falta um dado, marca o lugar para você completar."],
   ["Quem vê uma busca compartilhada?", "Só quem você convidar por e-mail e entrar com esse mesmo e-mail. Cada pessoa tem favoritas, Kanban e e-mails próprios. Ao convidar, você escolhe o nível: pode ver, pode editar ou pode gerenciar (também convida pessoas). Só quem criou pode excluir a busca."],
+  ["Vocês acessam meu LinkedIn?", "Não. Para as sugestões de perfil, você envia o PDF que o próprio LinkedIn gera (Mais › Salvar como PDF) ou cola o texto. Guardamos só o texto e você apaga quando quiser."],
   ["Dá para usar no celular?", "Sim. O painel foi pensado para telas pequenas e você pode adicioná-lo à tela de início para abrir como um app."],
 ];
 
@@ -547,6 +548,30 @@ function ResumeSection() {
                 </div>
                 <p className="mt-3 text-xs font-semibold">Carta de apresentação</p>
                 <div className="mt-2 space-y-1.5">{[100, 90, 96, 64].map((w, i) => <span key={i} className="block h-1.5 rounded-full bg-surface-2" style={{ width: `${w}%` }} />)}</div>
+              </div>
+            </div>
+          </div>
+        </article>
+
+        <article className="min-w-0 rounded-3xl border border-line bg-surface p-6 shadow-card sm:p-8 md:col-span-2">
+          <div className="grid items-center gap-6 md:grid-cols-[1fr_1.1fr]">
+            <div>
+              <span className="rounded-full border border-[#0a66c2]/30 bg-[#0a66c2]/10 px-3 py-1 text-[11px] font-semibold tracking-wider text-[#0a66c2] uppercase">Perfil do LinkedIn</span>
+              <h3 className="font-display mt-4 text-[2rem] leading-tight">Seja encontrado pelos recrutadores certos</h3>
+              <p className="mt-3 text-ink-2">Envie o PDF do seu perfil (o LinkedIn gera em “Mais › Salvar como PDF”) e receba a nota do perfil, três títulos prontos, o Sobre reescrito, as palavras-chave que faltam e sugestões por seção.</p>
+            </div>
+            <div className="space-y-2 rounded-2xl border border-line bg-bg/60 p-4">
+              {["Head de Growth | Aquisição, CRO e Experimentação | Fintech", "Growth que transforma dados em receita · ex-Nubank"].map((h, i) => (
+                <p key={h} className="flex items-center gap-2 rounded-xl border border-line bg-surface px-3 py-2 text-sm">
+                  <span className="grid size-6 shrink-0 place-items-center rounded-full bg-[#0a66c2]/10 text-xs font-bold text-[#0a66c2]">{i + 1}</span>
+                  <span className="min-w-0 flex-1 truncate font-medium">{h}</span>
+                  <span className="hidden shrink-0 font-mono text-[11px] text-ink-3 sm:inline">{h.length}/220</span>
+                  <Copy className="size-4 shrink-0 text-ink-3" />
+                </p>
+              ))}
+              <div className="flex flex-wrap gap-1.5 pt-1">
+                {["CAC", "LTV", "Experimentação"].map((k) => <span key={k} className="rounded-full bg-ok-soft px-2.5 py-1 text-xs font-medium text-ok">✓ {k}</span>)}
+                {["SQL", "Retenção"].map((k) => <span key={k} className="rounded-full border border-accent/40 bg-accent-soft/60 px-2.5 py-1 text-xs font-medium text-accent">+ {k}</span>)}
               </div>
             </div>
           </div>

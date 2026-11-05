@@ -64,7 +64,7 @@ const LetterOut = z.object({ letter: z.string() });
 
 /* ---------- prompts ---------- */
 
-const RULES = `Responda sempre em português do Brasil. Fale com a pessoa em segunda pessoa ("você"). Nunca invente experiência, cargo, empresa, número, certificação ou habilidade que o currículo não sustente: quando faltar um dado (ex.: um resultado em números), sugira o formato e marque o lugar com colchetes, como [X%].`;
+export const RULES = `Responda sempre em português do Brasil. Fale com a pessoa em segunda pessoa ("você"). Nunca invente experiência, cargo, empresa, número, certificação ou habilidade que o currículo não sustente: quando faltar um dado (ex.: um resultado em números), sugira o formato e marque o lugar com colchetes, como [X%].`;
 
 const TARGET = `Se a mensagem trouxer um CARGO-ALVO, avalie o currículo PARA ESSE CARGO: a nota mede o quanto ele convence um recrutador e um ATS dessa vaga; keywords são as que esse cargo pede e o currículo já tem; as sugestões aproximam o currículo do cargo (o que destacar, reordenar, reescrever com o vocabulário da área), sempre sem inventar nada. Sem cargo-alvo, avalie de forma geral.`;
 
@@ -106,7 +106,7 @@ async function feature(key: AiFeature) {
   try { return await aiFeature(key); } catch (e) { if (e instanceof AiDisabledError) throw new CvError(e.message, 403); throw e; }
 }
 
-async function call<S extends z.ZodType>(key: AiFeature, system: string, content: Anthropic.Beta.BetaContentBlockParam[], schema: S, effort: "low" | "medium" | "high"): Promise<z.infer<S>> {
+export async function call<S extends z.ZodType>(key: AiFeature, system: string, content: Anthropic.Beta.BetaContentBlockParam[], schema: S, effort: "low" | "medium" | "high"): Promise<z.infer<S>> {
   const { model } = await feature(key);
   let usage: Anthropic.Beta.BetaUsage | null = null;
   try {
@@ -301,10 +301,11 @@ Considere o item inteiro: a seção, o problema apontado, o trecho original, a s
 
 export type RefineInput = { section: string; issue: string; original: string; suggestion: string; why: string; thread: { role: "user" | "ai"; text: string }[] };
 
-export async function refineSuggestion(resumeText: string, item: RefineInput, note: string) {
+export async function refineSuggestion(resumeText: string, item: RefineInput, note: string, doc: "currículo" | "perfil do LinkedIn" = "currículo") {
   const conversa = item.thread.map((m) => `${m.role === "user" ? "PESSOA" : "VOCÊ"}: ${m.text}`).join("\n");
-  const text = `CURRÍCULO:\n\n${resumeText}\n\n---\n\nITEM\nSeção: ${item.section}\nProblema: ${item.issue}\nTrecho original: ${item.original || "(nenhum: a sugestão acrescenta algo novo)"}\nSua sugestão atual: ${item.suggestion}\nMotivo: ${item.why}${conversa ? `\n\nCONVERSA ATÉ AQUI\n${conversa}` : ""}\n\n---\n\nNOVO PONTO DA PESSOA: ${note}`;
-  const o = await call("refine", REFINE, [{ type: "text", text }], RefineOut, "medium");
+  const text = `${doc === "currículo" ? "CURRÍCULO" : "PERFIL DO LINKEDIN"}:\n\n${resumeText}\n\n---\n\nITEM\nSeção: ${item.section}\nProblema: ${item.issue}\nTrecho original: ${item.original || "(nenhum: a sugestão acrescenta algo novo)"}\nSua sugestão atual: ${item.suggestion}\nMotivo: ${item.why}${conversa ? `\n\nCONVERSA ATÉ AQUI\n${conversa}` : ""}\n\n---\n\nNOVO PONTO DA PESSOA: ${note}`;
+  const system = doc === "currículo" ? REFINE : REFINE.replace("especialista em currículos", "especialista em perfis do LinkedIn").replace("além do currículo completo", "além do perfil completo").replace("pronto para colar no lugar do trecho original", "pronto para colar no LinkedIn");
+  const o = await call("refine", system, [{ type: "text", text }], RefineOut, "medium");
   const suggestion = o.suggestion.trim().slice(0, 1200);
   if (!suggestion) throw new CvError("Não consegui refinar agora.", 502);
   return { reply: o.reply.trim().slice(0, 600), suggestion };

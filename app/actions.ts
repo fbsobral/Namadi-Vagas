@@ -555,3 +555,64 @@ export async function refineSuggestionAction(cvId: string, id: string, note: str
     return next;
   });
 }
+
+/* ---------- perfil do LinkedIn ---------- */
+
+async function myLinkedin(userId: string) {
+  const p = await q.getLinkedin(userId);
+  if (!p) throw new Error("Envie seu perfil do LinkedIn primeiro.");
+  return p;
+}
+
+/** Nova análise do perfil guardado (opcionalmente para outro cargo-alvo). */
+export async function reanalyzeLinkedinAction(target?: string) {
+  const userId = await uid();
+  return friendly(async () => {
+    const p = await myLinkedin(userId);
+    const t = target === undefined ? p.target_role : cleanName(target, 120);
+    const { getAiConfig } = await import("@/lib/ai-config");
+    const n = (await getAiConfig()).features.linkedin.daily;
+    await q.rateLimit("linkedin", userId, n, 86400_000, `Limite de ${n} análises de perfil por dia atingido. Tente amanhã.`);
+    const { analyzeLinkedin } = await import("@/lib/linkedin");
+    const { analysis } = await analyzeLinkedin([{ type: "text", text: `Este é o perfil do LinkedIn:\n\n${p.text}\n\nAnalise.` }], t);
+    await q.saveLinkedin(userId, { text: p.text, target_role: t, file_name: p.file_name, analysis });
+    refresh();
+    return { score: analysis.score, before: p.analysis.score };
+  });
+}
+
+/** Marca uma sugestão como feita no LinkedIn (ou desfaz). */
+export async function markLinkedinSuggestionAction(id: string, done: boolean) {
+  const userId = await uid();
+  const p = await myLinkedin(userId);
+  const suggestions = p.analysis.suggestions.map((x) => (x.id === id ? { ...x, status: done ? ("accepted" as const) : ("open" as const) } : x));
+  await q.updateLinkedinAnalysis(userId, { ...p.analysis, suggestions });
+  refresh();
+}
+
+/** "Refinar com a IA" numa sugestão do perfil. */
+export async function refineLinkedinAction(id: string, note: string) {
+  const userId = await uid();
+  return friendly(async () => {
+    const text = String(note ?? "").trim().slice(0, 1000);
+    if (text.length < 3) throw new Error("Escreva o ponto que você quer acrescentar.");
+    const p = await myLinkedin(userId);
+    const s = p.analysis.suggestions.find((x) => x.id === id);
+    if (!s) throw new Error("Sugestão não encontrada.");
+    const { getAiConfig } = await import("@/lib/ai-config");
+    await q.rateLimit("refine", userId, (await getAiConfig()).features.refine.daily, 86400_000, "Limite diário de refinamentos atingido. Tente amanhã.");
+    const { refineSuggestion } = await import("@/lib/resume");
+    const out = await refineSuggestion(p.text, { section: s.section, issue: s.issue, original: s.original, suggestion: s.suggestion, why: s.why, thread: (s.thread ?? []).slice(-10) }, text, "perfil do LinkedIn");
+    const now = Date.now();
+    const next = { ...s, suggestion: out.suggestion, thread: [...(s.thread ?? []), { role: "user" as const, text, at: now }, { role: "ai" as const, text: out.reply, at: now }].slice(-20) };
+    const fresh = await myLinkedin(userId);
+    await q.updateLinkedinAnalysis(userId, { ...fresh.analysis, suggestions: fresh.analysis.suggestions.map((x) => (x.id === id ? next : x)) });
+    refresh();
+    return next;
+  });
+}
+
+export async function deleteLinkedinAction() {
+  await q.deleteLinkedin(await uid());
+  refresh();
+}

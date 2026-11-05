@@ -61,6 +61,9 @@ Aqui, por escolha da pessoa, **o texto do currículo fica guardado** (tabela `re
 
 Modelos, limites e liga/desliga ficam no painel **Admin · IA** (abaixo). Saída estruturada validada; com Opus/Sonnet 5.5, fallback do servidor ativado (`fallbacks: "default"`) para o caso de recusa por política. Requer `ANTHROPIC_API_KEY`.
 
+## Perfil do LinkedIn (`/dashboard/linkedin`)
+A pessoa envia o PDF que o próprio LinkedIn gera (*Mais › Salvar como PDF*), um DOCX/TXT ou cola o texto, e escolhe o cargo-alvo (sugestões vêm dos currículos dela). O robô **não acessa o LinkedIn** (exige login e os termos não permitem automação). A IA devolve: nota com subnotas (título, Sobre, experiências, competências, encontrabilidade), **3 títulos** (≤ 220 caracteres) e o **Sobre reescrito** (≤ 2.600) com contador e copiar, palavras-chave que tem/faltam, 5 competências em destaque, sugestões por seção (copiar, "Já fiz no LinkedIn", **Refinar com a IA**) e um checklist do que o PDF não mostra. Guarda só o texto (tabela `linkedin_profiles`). Recurso "Análise do perfil do LinkedIn" no Admin · IA.
+
 ## Segmentar empresas
 No editor da busca, **Segmentar empresas** (opcional): modelo de negócio (B2B, B2C, B2B2C), porte (startup a 10 mil+ pessoas) e setores (lista fixa em `lib/segments.ts`). A IA classifica cada empresa **uma vez** e guarda na tabela `companies` (25 empresas por chamada, Haiku 5.5 sem raciocínio); as próximas vagas da mesma empresa não custam nada. Vagas fora do segmento vão para **Filtradas** com o motivo (“segmento: empresa B2C”); empresa desconhecida pela IA continua na lista; “Manter na lista” vence o segmento. Mudar os segmentos reaplica na hora com o cache e classifica o resto em segundo plano. O cartão da vaga mostra as etiquetas da empresa.
 

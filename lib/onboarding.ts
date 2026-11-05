@@ -2,13 +2,13 @@
 // "welcome" é o tour geral para quem chega; os demais explicam cada módulo na primeira visita
 // e podem ser revistos a qualquer momento pelo botão "?" ou pela central de ajuda.
 
-export type GuideId = "welcome" | "search" | "list" | "job" | "board" | "share" | "shared" | "resume";
+export type GuideId = "welcome" | "search" | "list" | "job" | "board" | "share" | "shared" | "resume" | "linkedin";
 
 export type VisualKey =
   | "radar" | "searchForm" | "robot" | "favContacts" | "kanban" | "emailShare" | "phone" | "cv" | "groups" | "exclude" | "sources"
   | "emailPreview" | "tabs" | "newBadge" | "toolbar" | "jobDetail" | "contactGroups" | "message" | "kanbanMove" | "boardFilter"
   | "invite" | "members" | "owner" | "sharedBanner" | "notifySelect" | "leave"
-  | "resumeScore" | "resumeChat" | "resumeFit" | "resumeLetter" | "resumeRefine" | "fitBulk" | "segments" | "listSort" | "cvTabs";
+  | "resumeScore" | "resumeChat" | "resumeFit" | "resumeLetter" | "resumeRefine" | "fitBulk" | "segments" | "listSort" | "cvTabs" | "linkedinScore" | "linkedinHeadline";
 
 export type GuideStep = {
   icon: IconKey;
@@ -351,6 +351,35 @@ export const GUIDES: Record<GuideId, Guide> = {
       },
     ],
   },
+  linkedin: {
+    id: "linkedin",
+    label: "Perfil do LinkedIn",
+    summary: "Nota do perfil, títulos prontos, Sobre reescrito e sugestões por seção",
+    icon: "users",
+    steps: [
+      {
+        icon: "file",
+        visual: "linkedinScore",
+        title: "Seu perfil, avaliado para o cargo que você quer",
+        body: "No LinkedIn, abra seu perfil e use “Mais › Salvar como PDF”. Envie aqui (ou cole o texto) e diga o cargo-alvo. A IA dá uma nota para título, Sobre, experiências, competências e o quanto você aparece nas buscas de recrutadores.",
+        bullets: ["O robô não entra no seu LinkedIn: você manda o PDF", "Guardamos só o texto e você apaga quando quiser"],
+      },
+      {
+        icon: "copy",
+        visual: "linkedinHeadline",
+        title: "Título e Sobre prontos para colar",
+        body: "Três opções de título dentro do limite de 220 caracteres e o Sobre reescrito com gancho na primeira linha. Cada um tem contador e botão de copiar.",
+        bullets: ["Palavras-chave que você já tem e as que faltam", "As 5 competências para deixar em destaque"],
+      },
+      {
+        icon: "sparkles",
+        visual: "resumeRefine",
+        title: "Sugestões por seção, com Refinar com a IA",
+        body: "Experiências, formação, certificados e destaques: copie a sugestão, conte algo que a IA não sabe para refinar e marque “Já fiz no LinkedIn”. No fim, um checklist do que o PDF não mostra (foto, capa, URL, recomendações).",
+      },
+    ],
+  },
+
   shared: {
     id: "shared",
     label: "Busca compartilhada comigo",
@@ -386,7 +415,7 @@ export const GUIDES: Record<GuideId, Guide> = {
   },
 };
 
-export const MODULE_GUIDES: GuideId[] = ["search", "list", "job", "board", "resume", "share", "shared"];
+export const MODULE_GUIDES: GuideId[] = ["search", "list", "job", "board", "resume", "linkedin", "share", "shared"];
 
 export const isGuideId = (s: unknown): s is GuideId => typeof s === "string" && s in GUIDES;
 

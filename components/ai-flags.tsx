@@ -12,4 +12,4 @@ export function AiFlagsProvider({ flags, children }: { flags: AiFlags; children:
 }
 
 export const useAiFlags = (): AiFlags =>
-  useContext(Ctx) ?? { cv_fill: true, resume: true, refine: true, fit: true, quickfit: true, autofit: true, letter: true, company: true };
+  useContext(Ctx) ?? { cv_fill: true, resume: true, linkedin: true, refine: true, fit: true, quickfit: true, autofit: true, letter: true, company: true };
