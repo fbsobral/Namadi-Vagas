@@ -66,21 +66,22 @@ export function QueryBuilder({ spec, onChange }: { spec: QuerySpec; onChange: (s
 function GroupCard({ index, isLast, group, canRemove, onChange, onRemove }: { index: number; isLast: boolean; group: Group; canRemove: boolean; onChange: (g: Group) => void; onRemove: () => void }) {
   return (
     <div className="rounded-2xl border border-line bg-bg p-3">
-      <div className="mb-2 flex items-center justify-between gap-2">
-        <span className="text-xs font-medium tracking-wider text-ink-3 uppercase">Grupo {index + 1}</span>
-        <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-1.5">
-          <span className="flex items-center gap-2 text-xs text-ink-3">
+      {/* no celular: "Grupo N" e o X numa linha, os controles na de baixo; em telas largas, tudo numa linha */}
+      <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-2">
+        <span className="shrink-0 text-xs font-medium tracking-wider whitespace-nowrap text-ink-3 uppercase">Grupo {index + 1}</span>
+        <div className="order-3 flex w-full flex-wrap items-center gap-x-3 gap-y-1.5 sm:order-none sm:ml-auto sm:w-auto sm:justify-end">
+          <span className="flex items-center gap-2 text-xs whitespace-nowrap text-ink-3">
             procurar em:
             <ScopeToggle value={group.scope ?? "any"} onChange={(scope) => onChange({ ...group, scope })} />
           </span>
           {group.terms.length > 1 && (
-            <span className="flex items-center gap-2 text-xs text-ink-3">
+            <span className="flex items-center gap-2 text-xs whitespace-nowrap text-ink-3">
               entre os termos:
               <OpToggle value={group.op} onChange={(op) => onChange({ ...group, op })} labels={["E", "OU"]} title="Como combinar os termos do grupo" />
             </span>
           )}
-          {canRemove && <button type="button" onClick={onRemove} aria-label="Remover grupo" className="grid size-7 place-items-center rounded-full text-ink-3 transition hover:bg-surface-2 hover:text-accent"><X className="size-4" /></button>}
         </div>
+        {canRemove && <button type="button" onClick={onRemove} aria-label="Remover grupo" className="order-2 ml-auto grid size-8 shrink-0 place-items-center rounded-full text-ink-3 transition hover:bg-surface-2 hover:text-accent sm:order-none sm:ml-0"><X className="size-4" /></button>}
       </div>
       <ChipInput terms={group.terms} onChange={(terms) => onChange({ ...group, terms })} placeholder={group.terms.length ? "adicionar outro termo…" : 'ex.: Product Designer'} autoFocus={isLast && index > 0} />
     </div>
